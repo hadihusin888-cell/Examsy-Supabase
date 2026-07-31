@@ -1,0 +1,6 @@
+{
+  "name": "Supabase-Examsy",
+  "description": "A modern, minimalist semi-online examination platform with student and admin portals, integrated with Supabase and Gemini for smart question management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
