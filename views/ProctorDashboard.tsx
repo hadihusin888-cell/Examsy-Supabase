@@ -191,12 +191,32 @@ const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
                         </td>
                         <td className="px-10 py-6 text-center">{getStatusBadge(student.status)}</td>
                         <td className="px-10 py-6 text-right">
-                           <button 
-                             onClick={() => { setSelectedStudent(student); setPendingStatus(student.status); }}
-                             className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-8 py-3 rounded-2xl hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-100 transition-all"
-                           >
-                             Atur
-                           </button>
+                           <div className="flex items-center justify-end gap-2">
+                             <button 
+                               disabled={isProcessing}
+                               onClick={async () => {
+                                 const isCurrentlyBlocked = student.status === StudentStatus.BLOKIR;
+                                 const nextStatus = isCurrentlyBlocked ? StudentStatus.BELUM_MASUK : StudentStatus.BLOKIR;
+                                 await onAction('UPDATE_STUDENT', {
+                                   ...student,
+                                   status: nextStatus
+                                 });
+                               }}
+                               className={`px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-sm active:scale-95 cursor-pointer flex items-center gap-1.5 ${
+                                 student.status === StudentStatus.BLOKIR
+                                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100'
+                                   : 'bg-red-600 hover:bg-red-700 text-white shadow-red-100'
+                               }`}
+                             >
+                               {student.status === StudentStatus.BLOKIR ? 'Buka Blokir' : 'Blokir'}
+                             </button>
+                             <button 
+                               onClick={() => { setSelectedStudent(student); setPendingStatus(student.status); }}
+                               className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-6 py-3 rounded-2xl hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-100 transition-all cursor-pointer"
+                             >
+                               Atur
+                             </button>
+                           </div>
                         </td>
                       </tr>
                     ))
@@ -227,9 +247,11 @@ const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
                   key={status}
                   disabled={isProcessing}
                   onClick={() => setPendingStatus(status)}
-                  className={`w-full py-4 rounded-2xl border-2 font-black text-[10px] md:text-[11px] uppercase tracking-widest transition-all duration-300 ${
+                  className={`w-full py-4 rounded-2xl border-2 font-black text-[10px] md:text-[11px] uppercase tracking-widest transition-all duration-300 cursor-pointer ${
                     pendingStatus === status 
-                    ? 'bg-emerald-600 border-emerald-600 text-white shadow-xl shadow-emerald-100' 
+                    ? (status === StudentStatus.BLOKIR
+                        ? 'bg-red-600 border-red-600 text-white shadow-xl shadow-red-200'
+                        : 'bg-emerald-600 border-emerald-600 text-white shadow-xl shadow-emerald-100')
                     : 'bg-slate-50 border-slate-50 text-slate-400 hover:border-slate-200 disabled:opacity-50'
                   }`}
                 >

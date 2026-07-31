@@ -683,9 +683,23 @@ export const dbAction = async (action: string, payload: any): Promise<boolean> =
         result = await supabase.from('students').delete().in('nis', payload);
         break;
 
-      case 'BULK_UPDATE_STUDENTS':
-        result = await supabase.from('students').update(payload.updates).in('nis', payload.selectedNis);
+      case 'BULK_UPDATE_STUDENTS': {
+        const formattedUpdates: any = { ...payload.updates };
+        if (formattedUpdates.roomId !== undefined) {
+          formattedUpdates.room_id = formattedUpdates.roomId;
+          delete formattedUpdates.roomId;
+        }
+        let res = await supabase.from('students').update(formattedUpdates).in('nis', payload.selectedNis);
+        if (res.error) {
+          res = await supabase.from('students').update(payload.updates).in('nis', payload.selectedNis);
+        }
+        
+        // Synchronize local cache immediately
+        updateLocalCacheList('BULK_UPDATE_STUDENTS', payload);
+
+        result = res;
         break;
+      }
 
       case 'ADD_SESSION':
       case 'UPDATE_SESSION': {
