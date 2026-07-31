@@ -25,6 +25,60 @@ const StudentLogin: React.FC<StudentLoginProps> = ({ sessions, students, onLogin
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
 
+  // Generate unique classes dynamically from students and sessions props or local cache
+  const classOptions = React.useMemo(() => {
+    const classes = new Set<string>();
+    
+    // Add default grade options
+    classes.add("7");
+    classes.add("8");
+    classes.add("9");
+    
+    // Try to load from localStorage cache
+    try {
+      const cachedStudentsRaw = localStorage.getItem("examsy_cache_students");
+      if (cachedStudentsRaw) {
+        const cachedStudents = JSON.parse(cachedStudentsRaw);
+        if (Array.isArray(cachedStudents)) {
+          cachedStudents.forEach(s => {
+            if (s.class) classes.add(String(s.class).trim());
+          });
+        }
+      }
+      const cachedSessionsRaw = localStorage.getItem("examsy_cache_sessions");
+      if (cachedSessionsRaw) {
+        const cachedSessions = JSON.parse(cachedSessionsRaw);
+        if (Array.isArray(cachedSessions)) {
+          cachedSessions.forEach(sess => {
+            if (sess.class) classes.add(String(sess.class).trim());
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to parse cache in StudentLogin class options:", e);
+    }
+    
+    // Fallback to props
+    if (Array.isArray(students)) {
+      students.forEach(s => {
+        if (s.class) classes.add(String(s.class).trim());
+      });
+    }
+    if (Array.isArray(sessions)) {
+      sessions.forEach(sess => {
+        if (sess.class) classes.add(String(sess.class).trim());
+      });
+    }
+
+    // Convert Set to array, filter out empty, and sort alphabetically/numerically
+    return Array.from(classes)
+      .map(c => String(c).trim())
+      .filter(Boolean)
+      .sort((a, b) => {
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+      });
+  }, [students, sessions]);
+
   // Load saved credentials on mount
   React.useEffect(() => {
     const savedNis = localStorage.getItem('examsy_student_nis');
@@ -182,9 +236,11 @@ const StudentLogin: React.FC<StudentLoginProps> = ({ sessions, students, onLogin
                 className="w-full px-3 py-3 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold appearance-none disabled:opacity-70 text-sm"
               >
                 <option value="">Kelas</option>
-                <option value="7">Kls 7</option>
-                <option value="8">Kls 8</option>
-                <option value="9">Kls 9</option>
+                {classOptions.map(cls => (
+                  <option key={cls} value={cls}>
+                    {cls.startsWith('XII') || cls.startsWith('XI') || cls.startsWith('X') || cls.includes('-') ? cls : `Kls ${cls}`}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-1">

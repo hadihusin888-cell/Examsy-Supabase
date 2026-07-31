@@ -457,6 +457,40 @@ export const subscribeStudent = (nis: string, callback: (student: Student | null
   }
 };
 
+// Helper for lenient class matching
+const isClassMatchingLenient = (studentClass: string, inputClass: string): boolean => {
+  const sClass = String(studentClass || '').trim().toUpperCase();
+  const iClass = String(inputClass || '').trim().toUpperCase();
+  
+  if (sClass === iClass) return true;
+  
+  // If student class is e.g. "9A" and input class is "9", or "Kelas 9"
+  // Check if they are prefixed/contained
+  if (sClass.startsWith(iClass) || iClass.startsWith(sClass)) return true;
+  if (sClass.includes(iClass) || iClass.includes(sClass)) return true;
+  
+  // Roman numerals compatibility
+  const romanMap: Record<string, string[]> = {
+    '7': ['VII', 'KLS 7', 'KLS VII', 'KELAS VII', 'KELAS 7'],
+    '8': ['VIII', 'KLS 8', 'KLS VIII', 'KELAS VIII', 'KELAS 8'],
+    '9': ['IX', 'KLS 9', 'KLS IX', 'KELAS IX', 'KELAS 9']
+  };
+  
+  if (romanMap[iClass]) {
+    for (const alt of romanMap[iClass]) {
+      if (sClass.includes(alt) || sClass === alt) return true;
+    }
+  }
+  
+  if (romanMap[sClass]) {
+    for (const alt of romanMap[sClass]) {
+      if (iClass.includes(alt) || iClass === alt) return true;
+    }
+  }
+
+  return false;
+};
+
 export const validateStudentLogin = async (
   nis: string,
   pass: string,
@@ -495,7 +529,7 @@ export const validateStudentLogin = async (
       return { success: false, error: 'Anda telah menyelesaikan sesi ujian ini.' };
     }
 
-    if (String(student.class).trim() !== trimmedClass) {
+    if (!isClassMatchingLenient(student.class, trimmedClass)) {
       return { success: false, error: `Sinkronisasi Gagal: Anda terdaftar di Kelas ${student.class}, bukan Kelas ${trimmedClass}.` };
     }
 
@@ -546,7 +580,7 @@ export const validateStudentLogin = async (
       return { success: false, error: 'Anda telah menyelesaikan sesi ujian ini.' };
     }
 
-    if (String(student.class).trim() !== trimmedClass) {
+    if (!isClassMatchingLenient(student.class, trimmedClass)) {
       return { success: false, error: `Sinkronisasi Gagal: Anda terdaftar di Kelas ${student.class}, bukan Kelas ${trimmedClass}.` };
     }
 
@@ -554,7 +588,7 @@ export const validateStudentLogin = async (
     const cachedSessions: ExamSession[] = cachedSessionsRaw ? JSON.parse(cachedSessionsRaw) : DEFAULT_FALLBACK_SESSIONS;
     const matchedSession = cachedSessions.find(sess => 
       sess.isActive && 
-      String(sess.class).trim() === trimmedClass && 
+      isClassMatchingLenient(sess.class, trimmedClass) && 
       String(sess.pin || '').trim().toUpperCase() === trimmedPin
     );
 
