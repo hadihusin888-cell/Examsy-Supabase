@@ -256,6 +256,10 @@ export const updateLocalCacheList = (action: string, payload: any) => {
     const list = cachedRooms.filter(r => String(r.id) !== String(payload.id));
     localStorage.setItem("examsy_cache_rooms", JSON.stringify(list));
   }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('examsy_local_cache_updated'));
+  }
 };
 
 export const normalizeSession = (s: any): ExamSession => ({
@@ -435,6 +439,8 @@ export const getDirectStudentAndSession = async (nis: string, sessionId: string)
 
 export const subscribeStudent = (nis: string, callback: (student: Student | null) => void) => {
   try {
+    if (checkIsOfflineFallbackActive()) return () => {};
+
     const channel = supabase
       .channel(`student-${nis}`)
       .on(
@@ -442,7 +448,7 @@ export const subscribeStudent = (nis: string, callback: (student: Student | null
         { event: '*', schema: 'public', table: 'students', filter: `nis=eq.${nis}` },
         (payload) => {
           if (payload.new) {
-            callback(payload.new as Student);
+            callback(normalizeStudent(payload.new));
           }
         }
       )
@@ -453,6 +459,35 @@ export const subscribeStudent = (nis: string, callback: (student: Student | null
     };
   } catch (e) {
     console.warn("Realtime subscription failed:", e);
+    return () => {};
+  }
+};
+
+export const subscribeAllStudents = (callback: (event: string, student: Student, oldNis?: string) => void) => {
+  try {
+    if (checkIsOfflineFallbackActive()) return () => {};
+
+    const channel = supabase
+      .channel('all-students-updates')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'students' },
+        (payload) => {
+          if (payload.eventType === 'DELETE' && payload.old) {
+            callback('DELETE', normalizeStudent(payload.old), String(payload.old.nis));
+          } else if (payload.new) {
+            const norm = normalizeStudent(payload.new);
+            callback(payload.eventType, norm);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch (e) {
+    console.warn("Realtime all students subscription error:", e);
     return () => {};
   }
 };

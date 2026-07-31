@@ -149,6 +149,15 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
   }, [isBlocked, violations, student, onAction]);
 
   useEffect(() => {
+    if (isBlocked) {
+      releaseWakeLock();
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }, [isBlocked, releaseWakeLock]);
+
+  useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey && (e.key === 'p' || e.key === 's' || e.key === 'u')) || e.key === 'F12') {

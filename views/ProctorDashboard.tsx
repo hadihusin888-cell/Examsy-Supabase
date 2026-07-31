@@ -81,20 +81,42 @@ const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
         <div className="max-w-6xl mx-auto">
           <div className="mb-6 md:mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-5">
             <div>
-              <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">Status Peserta</h2>
-              <p className="text-slate-400 font-bold text-[9px] uppercase tracking-widest mt-1.5 md:mt-2">Monitoring {filteredStudents.length} Siswa Aktif</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">Status Peserta</h2>
+                <span className="bg-emerald-50 text-emerald-600 border border-emerald-200 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping inline-block"></span>
+                  Realtime Active
+                </span>
+              </div>
+              <p className="text-slate-400 font-bold text-[9px] uppercase tracking-widest mt-1.5 md:mt-2">
+                Monitoring {filteredStudents.length} Siswa • Terhubung Otomatis
+              </p>
             </div>
-            <div className="w-full md:w-80 relative group">
-              <input 
-                type="text" 
-                placeholder="Cari Nama / NIS..." 
-                value={searchTerm} 
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-6 py-3 bg-white border border-slate-200 rounded-xl shadow-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all font-medium text-xs"
-              />
-              <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300 group-focus-within:text-indigo-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+            <div className="w-full md:w-auto flex items-center gap-2">
+              <div className="w-full md:w-72 relative group">
+                <input 
+                  type="text" 
+                  placeholder="Cari Nama / NIS..." 
+                  value={searchTerm} 
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl shadow-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all font-medium text-xs"
+                />
+                <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300 group-focus-within:text-indigo-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              {onRefresh && (
+                <button
+                  onClick={onRefresh}
+                  disabled={globalSyncing}
+                  title="Segarkan data manual jika diperlukan"
+                  className="p-2.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer flex items-center gap-1.5"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${globalSyncing ? 'animate-spin text-indigo-600' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ViewState, Student, ExamSession, StudentStatus, Room } from './types';
-import { dbAction, supabase, fetchStaticData, checkIsOfflineFallbackActive, setOfflineFallbackActive, DEFAULT_FALLBACK_STUDENTS, DEFAULT_FALLBACK_SESSIONS, DEFAULT_FALLBACK_ROOMS, getDirectStudentAndSession, subscribeStudent } from './services/supabaseService';
+import { dbAction, supabase, fetchStaticData, checkIsOfflineFallbackActive, setOfflineFallbackActive, DEFAULT_FALLBACK_STUDENTS, DEFAULT_FALLBACK_SESSIONS, DEFAULT_FALLBACK_ROOMS, getDirectStudentAndSession, subscribeStudent, subscribeAllStudents } from './services/supabaseService';
 
 import StudentLogin from './views/StudentLogin';
 import AdminLogin from './views/AdminLogin';
@@ -236,11 +236,77 @@ const App: React.FC = () => {
     const unsub = subscribeStudent(String(currentUser.nis), (updatedStudent) => {
       if (updatedStudent) {
         setCurrentUser(updatedStudent);
+        setStudents(prev => {
+          const idx = prev.findIndex(s => String(s.nis) === String(updatedStudent.nis));
+          if (idx > -1) {
+            const nextList = [...prev];
+            nextList[idx] = updatedStudent;
+            return nextList;
+          }
+          return [...prev, updatedStudent];
+        });
       }
     });
 
     return () => unsub();
   }, [view, currentUser?.nis]);
+
+  // Listener Real-time WebSocket Supabase untuk Admin & Proktor
+  // Menerima update status siswa secara instant tanpa polling/read berulang (hemat kuota database)
+  useEffect(() => {
+    if (view !== 'ADMIN_DASHBOARD' && view !== 'PROCTOR_DASHBOARD') {
+      return;
+    }
+
+    const unsub = subscribeAllStudents((eventType, student, oldNis) => {
+      setStudents(prev => {
+        if (eventType === 'DELETE' && oldNis) {
+          return prev.filter(s => String(s.nis) !== String(oldNis));
+        }
+        const targetNis = String(student.nis);
+        const idx = prev.findIndex(s => String(s.nis) === targetNis);
+        if (idx > -1) {
+          const nextList = [...prev];
+          nextList[idx] = { ...nextList[idx], ...student };
+          return nextList;
+        } else {
+          return [...prev, student];
+        }
+      });
+    });
+
+    return () => unsub();
+  }, [view]);
+
+  // Sync cache lokal & antar-tab untuk mode offline/simulasi
+  useEffect(() => {
+    const handleLocalCacheUpdate = () => {
+      const cachedStudentsRaw = localStorage.getItem("examsy_cache_students");
+      if (cachedStudentsRaw) {
+        try {
+          const parsed = JSON.parse(cachedStudentsRaw) as Student[];
+          setStudents(parsed);
+          if (currentUser) {
+            const updated = parsed.find(s => String(s.nis) === String(currentUser.nis));
+            if (updated) setCurrentUser(updated);
+          }
+        } catch (_) {}
+      }
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'examsy_cache_students' && e.newValue) {
+        handleLocalCacheUpdate();
+      }
+    };
+
+    window.addEventListener('examsy_local_cache_updated', handleLocalCacheUpdate);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('examsy_local_cache_updated', handleLocalCacheUpdate);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [currentUser]);
 
   const handleAction = async (action: string, payload: any) => {
     setIsProcessing(true);
@@ -405,10 +471,11 @@ const App: React.FC = () => {
             onAction={handleAction}
             onFinish={async () => { 
               if (currentUser) {
+                const isCurrentlyBlocked = currentUser.status === StudentStatus.BLOKIR;
                 await handleAction('UPDATE_STUDENT', {
                   ...currentUser,
-                  status: StudentStatus.SELESAI,
-                  violations: 0
+                  status: isCurrentlyBlocked ? StudentStatus.BLOKIR : StudentStatus.SELESAI,
+                  violations: isCurrentlyBlocked ? (currentUser.violations || 0) : 0
                 });
               }
               setCurrentUser(null); 
