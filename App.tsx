@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ViewState, Student, ExamSession, StudentStatus, Room } from './types';
-import { dbAction, supabase, fetchStaticData, checkIsOfflineFallbackActive, setOfflineFallbackActive, DEFAULT_FALLBACK_STUDENTS, DEFAULT_FALLBACK_SESSIONS, DEFAULT_FALLBACK_ROOMS, getDirectStudentAndSession, subscribeStudent, subscribeAllStudents } from './services/supabaseService';
+import { dbAction, supabase, fetchStaticData, checkIsOfflineFallbackActive, setOfflineFallbackActive, DEFAULT_FALLBACK_STUDENTS, DEFAULT_FALLBACK_SESSIONS, DEFAULT_FALLBACK_ROOMS, getDirectStudentAndSession, subscribeStudent, subscribeAllStudents, normalizeStudent } from './services/supabaseService';
 
 import StudentLogin from './views/StudentLogin';
 import AdminLogin from './views/AdminLogin';
@@ -237,7 +237,7 @@ const App: React.FC = () => {
     refreshData();
   }, [view]);
 
-  // Sangat penting: Listener real-time single-doc untuk murid yang sedang ujian lewat Supabase
+  // Sangat penting: Listener murni real-time WebSocket Supabase untuk murid yang sedang ujian
   useEffect(() => {
     if (view !== 'EXAM_ROOM' || !currentUser?.nis) {
       return;
@@ -245,11 +245,16 @@ const App: React.FC = () => {
 
     const unsub = subscribeStudent(String(currentUser.nis), (updatedStudent) => {
       if (updatedStudent) {
-        setCurrentUser(updatedStudent);
+        setCurrentUser(prev => {
+          if (!prev) return updatedStudent;
+          return { ...prev, ...updatedStudent };
+        });
       }
     });
 
-    return () => unsub();
+    return () => {
+      unsub();
+    };
   }, [view, currentUser?.nis]);
 
   // Listener Real-time WebSocket Supabase untuk Admin & Proktor

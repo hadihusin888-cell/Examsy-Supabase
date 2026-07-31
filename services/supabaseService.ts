@@ -446,7 +446,7 @@ export const subscribeStudent = (nis: string, callback: (student: Student | null
         { event: '*', schema: 'public', table: 'students', filter: `nis=eq.${nis}` },
         (payload) => {
           if (payload.new) {
-            callback(payload.new as Student);
+            callback(normalizeStudent(payload.new));
           }
         }
       )
