@@ -153,9 +153,14 @@ const App: React.FC = () => {
               const { student, session } = await getDirectStudentAndSession(String(auth.nis), String(auth.sessionId));
 
               if (student && session) {
-                setCurrentUser(student);
-                setCurrentSession(session);
-                setView('EXAM_ROOM');
+                if (student.status === StudentStatus.BLOKIR) {
+                  localStorage.removeItem('examsy_auth');
+                  setView('STUDENT_LOGIN');
+                } else {
+                  setCurrentUser(student);
+                  setCurrentSession(session);
+                  setView('EXAM_ROOM');
+                }
               } else {
                 localStorage.removeItem('examsy_auth');
                 setView('STUDENT_LOGIN');
@@ -172,9 +177,14 @@ const App: React.FC = () => {
               const matchedSession = cachedSessions.find((s: ExamSession) => String(s.id) === String(auth.sessionId));
 
               if (matchedStudent && matchedSession) {
-                setCurrentUser(matchedStudent);
-                setCurrentSession(matchedSession);
-                setView('EXAM_ROOM');
+                if (matchedStudent.status === StudentStatus.BLOKIR) {
+                  localStorage.removeItem('examsy_auth');
+                  setView('STUDENT_LOGIN');
+                } else {
+                  setCurrentUser(matchedStudent);
+                  setCurrentSession(matchedSession);
+                  setView('EXAM_ROOM');
+                }
               } else {
                 localStorage.removeItem('examsy_auth');
                 setView('STUDENT_LOGIN');
@@ -461,13 +471,14 @@ const App: React.FC = () => {
             session={currentSession} 
             onAction={handleAction}
             onFinish={async () => { 
-              if (currentUser) {
+              if (currentUser && currentUser.status !== StudentStatus.BLOKIR) {
                 await handleAction('UPDATE_STUDENT', {
                   ...currentUser,
                   status: StudentStatus.SELESAI,
                   violations: 0
                 });
               }
+              localStorage.removeItem('examsy_auth');
               setCurrentUser(null); 
               setCurrentSession(null); 
               setView('STUDENT_LOGIN'); 

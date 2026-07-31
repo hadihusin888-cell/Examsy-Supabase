@@ -238,6 +238,20 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
     if (violations >= MAX_VIOLATIONS) handleFinalFinish();
   }, [violations]);
 
+  // Efek otomatis keluar ketika siswa diblokir oleh proktor/admin
+  useEffect(() => {
+    if (isBlocked) {
+      releaseWakeLock();
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+      const kickTimer = setTimeout(() => {
+        handleFinalFinish();
+      }, 2000);
+      return () => clearTimeout(kickTimer);
+    }
+  }, [isBlocked, releaseWakeLock]);
+
   const isIPhone = /iPhone/i.test(navigator.userAgent);
   const isIPad = /iPad/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isTabletOrMobile = isIPhone || isIPad || /Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0);
@@ -260,16 +274,23 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
 
       {/* MODAL DIBLOKIR */}
       {isBlocked && (
-        <div className="fixed inset-0 z-[10000] bg-slate-950/90 flex items-center justify-center p-6 backdrop-blur-xl">
-          <div className="bg-white w-full max-w-[360px] p-8 md:p-10 rounded-2xl text-center shadow-2xl border-t-8 border-red-600 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[10000] bg-slate-950/95 flex items-center justify-center p-6 backdrop-blur-xl">
+          <div className="bg-white w-full max-w-[380px] p-8 md:p-10 rounded-2xl text-center shadow-2xl border-t-8 border-red-600 animate-in zoom-in-95 duration-200">
             <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m0-8V7m0 0a2 2 0 100-4 2 2 0 000 4zm-8.228 11h16.456c.959 0 1.56-1.04 1.08-1.861L13.08 4.14a1.25 1.25 0 00-2.16 0L2.692 16.14c-.48.821.121 1.861 1.08 1.861z" />
               </svg>
             </div>
             <h2 className="text-2xl font-black text-slate-900 mb-3 uppercase tracking-tighter">Akses Diblokir</h2>
-            <p className="text-slate-500 text-xs font-bold uppercase mb-8 leading-relaxed">Ujian dihentikan secara sepihak oleh Proktor Ruang. Silakan hubungi petugas.</p>
-            <button onClick={handleFinalFinish} className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 cursor-pointer">KONFIRMASI & KELUAR</button>
+            <p className="text-slate-600 text-xs font-bold uppercase mb-2 leading-relaxed">
+              Ujian dihentikan secara sepihak oleh Proktor / Admin.
+            </p>
+            <p className="text-red-600 text-[10px] font-black uppercase tracking-wider mb-6 animate-pulse">
+              Mengeluarkan Anda dari pengerjaan soal...
+            </p>
+            <button onClick={handleFinalFinish} className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 cursor-pointer">
+              KONFIRMASI & KELUAR
+            </button>
           </div>
         </div>
       )}
