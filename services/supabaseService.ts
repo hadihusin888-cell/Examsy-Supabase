@@ -437,13 +437,50 @@ export const getDirectStudentAndSession = async (nis: string, sessionId: string)
   }
 };
 
-export const subscribeStudent = (nis: string, callback: (student: Student | null) => void) => {
+// Global Supabase Broadcast Channel (0 DB reads for instant client-to-client notifications)
+export const globalRealtimeChannel = supabase.channel('examsy-global-broadcast', {
+  config: { broadcast: { self: true } }
+});
+globalRealtimeChannel.subscribe();
+
+export const broadcastStudentUpdate = (student: Partial<Student> & { nis: string | number }) => {
   try {
-    const channel = supabase
-      .channel(`student-${nis}`)
+    const norm = normalizeStudent(student);
+    // 1. Broadcast via Supabase WebSocket (0 Postgres DB Reads!)
+    globalRealtimeChannel.send({
+      type: 'broadcast',
+      event: 'STUDENT_UPDATE',
+      payload: norm
+    }).catch(err => console.warn("Supabase broadcast send error:", err));
+
+    // 2. Broadcast via Browser BroadcastChannel API (0 network calls, multi-tab sync)
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('examsy_bc_channel');
+        bc.postMessage({ type: 'STUDENT_UPDATE', student: norm });
+        bc.close();
+      } catch (_) {}
+    }
+
+    // 3. Dispatch local event
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('examsy_local_cache_updated'));
+    }
+  } catch (e) {
+    console.warn("broadcastStudentUpdate exception:", e);
+  }
+};
+
+export const subscribeStudent = (nis: string, callback: (student: Student | null) => void) => {
+  const targetNis = String(nis);
+
+  try {
+    // A. Listen to Supabase Postgres Changes
+    const pgChannel = supabase
+      .channel(`student-pg-${targetNis}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'students', filter: `nis=eq.${nis}` },
+        { event: '*', schema: 'public', table: 'students', filter: `nis=eq.${targetNis}` },
         (payload) => {
           if (payload.new) {
             callback(normalizeStudent(payload.new));
@@ -452,8 +489,64 @@ export const subscribeStudent = (nis: string, callback: (student: Student | null
       )
       .subscribe();
 
+    // B. Listen to Supabase Realtime Broadcast Channel (0 DB reads)
+    const bcSub = globalRealtimeChannel.on(
+      'broadcast',
+      { event: 'STUDENT_UPDATE' },
+      (payload) => {
+        if (payload.payload && String(payload.payload.nis) === targetNis) {
+          callback(normalizeStudent(payload.payload));
+        }
+      }
+    );
+
+    // C. Listen to Browser BroadcastChannel API (Multi-tab support)
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        bc = new BroadcastChannel('examsy_bc_channel');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'STUDENT_UPDATE' && String(event.data.student?.nis) === targetNis) {
+            callback(normalizeStudent(event.data.student));
+          }
+        };
+      } catch (_) {}
+    }
+
+    // D. Listen to Local Cache Events (localStorage & custom event)
+    const handleLocalCache = () => {
+      const raw = localStorage.getItem('examsy_cache_students');
+      if (raw) {
+        try {
+          const parsed: Student[] = JSON.parse(raw);
+          const found = parsed.find(s => String(s.nis) === targetNis);
+          if (found) {
+            callback(found);
+          }
+        } catch (_) {}
+      }
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'examsy_cache_students') {
+        handleLocalCache();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('examsy_local_cache_updated', handleLocalCache);
+      window.addEventListener('storage', handleStorageChange);
+    }
+
     return () => {
-      supabase.removeChannel(channel);
+      try { supabase.removeChannel(pgChannel); } catch (_) {}
+      if (bc) {
+        try { bc.close(); } catch (_) {}
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('examsy_local_cache_updated', handleLocalCache);
+        window.removeEventListener('storage', handleStorageChange);
+      }
     };
   } catch (e) {
     console.warn("Realtime subscription failed:", e);
@@ -635,6 +728,17 @@ export const validateStudentLogin = async (
 
 export const dbAction = async (action: string, payload: any): Promise<boolean> => {
   updateLocalCacheList(action, payload);
+
+  // Instant zero-DB-read broadcast to active student WebSocket / BroadcastChannel
+  if (action === 'ADD_STUDENT' || action === 'UPDATE_STUDENT') {
+    broadcastStudentUpdate(payload);
+  } else if (action === 'BULK_UPDATE_STUDENTS') {
+    if (Array.isArray(payload?.selectedNis)) {
+      payload.selectedNis.forEach((nis: string | number) => {
+        broadcastStudentUpdate({ nis, ...payload.updates });
+      });
+    }
+  }
 
   try {
     let result: { error: any } | null = null;
