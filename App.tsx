@@ -236,15 +236,6 @@ const App: React.FC = () => {
     const unsub = subscribeStudent(String(currentUser.nis), (updatedStudent) => {
       if (updatedStudent) {
         setCurrentUser(updatedStudent);
-        setStudents(prev => {
-          const idx = prev.findIndex(s => String(s.nis) === String(updatedStudent.nis));
-          if (idx > -1) {
-            const nextList = [...prev];
-            nextList[idx] = updatedStudent;
-            return nextList;
-          }
-          return [...prev, updatedStudent];
-        });
       }
     });
 
@@ -471,11 +462,10 @@ const App: React.FC = () => {
             onAction={handleAction}
             onFinish={async () => { 
               if (currentUser) {
-                const isCurrentlyBlocked = currentUser.status === StudentStatus.BLOKIR;
                 await handleAction('UPDATE_STUDENT', {
                   ...currentUser,
-                  status: isCurrentlyBlocked ? StudentStatus.BLOKIR : StudentStatus.SELESAI,
-                  violations: isCurrentlyBlocked ? (currentUser.violations || 0) : 0
+                  status: StudentStatus.SELESAI,
+                  violations: 0
                 });
               }
               setCurrentUser(null); 

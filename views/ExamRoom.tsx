@@ -149,15 +149,6 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
   }, [isBlocked, violations, student, onAction]);
 
   useEffect(() => {
-    if (isBlocked) {
-      releaseWakeLock();
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
-    }
-  }, [isBlocked, releaseWakeLock]);
-
-  useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey && (e.key === 'p' || e.key === 's' || e.key === 'u')) || e.key === 'F12') {
@@ -390,34 +381,6 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
           </div>
         )}
       </main>
-
-      {/* MODAL STATUS TERBLOKIR */}
-      {isBlocked && (
-        <div className="fixed inset-0 z-[10000] bg-slate-950/95 flex items-center justify-center p-6 backdrop-blur-2xl animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-md p-8 md:p-12 rounded-[3rem] text-center shadow-2xl border-t-8 border-red-600 animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <span className="bg-red-50 text-red-600 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest border border-red-200">
-              Status Ujian: Blokir
-            </span>
-            <h3 className="text-2xl font-black text-slate-900 mt-4 mb-2 uppercase tracking-tighter leading-tight">
-              AKUN ANDA DIBLOKIR
-            </h3>
-            <p className="text-slate-600 text-xs font-bold uppercase mb-8 leading-relaxed px-2">
-              Akses ujian Anda telah diblokir oleh Proktor/Admin. Anda secara otomatis keluar dari halaman soal. Silakan hubungi pengawas ruang.
-            </p>
-            <button 
-              onClick={handleFinalFinish}
-              className="w-full py-5 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-red-200 active:scale-95 transition-all cursor-pointer"
-            >
-              Keluar dari Ujian
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* MODAL PELANGGARAN */}
       {isFocusLost && hasConsented && !isBlocked && (

@@ -531,25 +531,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="px-8 py-5 text-center">{getStatusBadge(student.status)}</td>
                           <td className="px-8 py-5 text-right pr-12">
                             <div className="flex justify-end gap-2">
-                               <button 
-                                 disabled={isProcessing}
-                                 onClick={async () => {
-                                   const isCurrentlyBlocked = student.status === StudentStatus.BLOKIR;
-                                   const nextStatus = isCurrentlyBlocked ? StudentStatus.BELUM_MASUK : StudentStatus.BLOKIR;
-                                   await onAction('UPDATE_STUDENT', {
-                                     ...student,
-                                     status: nextStatus
-                                   });
-                                 }}
-                                 title={student.status === StudentStatus.BLOKIR ? "Buka Blokir Siswa" : "Blokir Siswa"}
-                                 className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 flex items-center gap-1 cursor-pointer ${
-                                   student.status === StudentStatus.BLOKIR
-                                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100'
-                                     : 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-200'
-                                 }`}
-                               >
-                                 {student.status === StudentStatus.BLOKIR ? 'Buka Blokir' : 'Blokir'}
-                               </button>
                                <button onClick={() => setStudentToEdit(student)} title="Edit" className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition-all">
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                                </button>

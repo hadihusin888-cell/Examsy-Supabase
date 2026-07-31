@@ -439,8 +439,6 @@ export const getDirectStudentAndSession = async (nis: string, sessionId: string)
 
 export const subscribeStudent = (nis: string, callback: (student: Student | null) => void) => {
   try {
-    if (checkIsOfflineFallbackActive()) return () => {};
-
     const channel = supabase
       .channel(`student-${nis}`)
       .on(
@@ -448,7 +446,7 @@ export const subscribeStudent = (nis: string, callback: (student: Student | null
         { event: '*', schema: 'public', table: 'students', filter: `nis=eq.${nis}` },
         (payload) => {
           if (payload.new) {
-            callback(normalizeStudent(payload.new));
+            callback(payload.new as Student);
           }
         }
       )
@@ -683,23 +681,9 @@ export const dbAction = async (action: string, payload: any): Promise<boolean> =
         result = await supabase.from('students').delete().in('nis', payload);
         break;
 
-      case 'BULK_UPDATE_STUDENTS': {
-        const formattedUpdates: any = { ...payload.updates };
-        if (formattedUpdates.roomId !== undefined) {
-          formattedUpdates.room_id = formattedUpdates.roomId;
-          delete formattedUpdates.roomId;
-        }
-        let res = await supabase.from('students').update(formattedUpdates).in('nis', payload.selectedNis);
-        if (res.error) {
-          res = await supabase.from('students').update(payload.updates).in('nis', payload.selectedNis);
-        }
-        
-        // Synchronize local cache immediately
-        updateLocalCacheList('BULK_UPDATE_STUDENTS', payload);
-
-        result = res;
+      case 'BULK_UPDATE_STUDENTS':
+        result = await supabase.from('students').update(payload.updates).in('nis', payload.selectedNis);
         break;
-      }
 
       case 'ADD_SESSION':
       case 'UPDATE_SESSION': {
