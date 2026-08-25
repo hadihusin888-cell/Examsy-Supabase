@@ -278,7 +278,7 @@ export const normalizeStudent = (s: any): Student => ({
   nis: String(s.nis),
   name: String(s.name || ''),
   class: String(s.class || ''),
-  password: String(s.password || ''),
+  password: String(s.password || s.passkey || ''),
   status: s.status || StudentStatus.BELUM_MASUK,
   roomId: String(s.roomId || s.room_id || s.roomid || ''),
   violations: Number(s.violations || 0)
@@ -289,7 +289,7 @@ export const normalizeRoom = (r: any): Room => ({
   name: String(r.name || ''),
   capacity: Number(r.capacity || 0),
   username: String(r.username || ''),
-  password: String(r.password || '')
+  password: String(r.password || r.passkey || '')
 });
 
 export const fetchStudents = async (): Promise<Student[]> => {
@@ -743,17 +743,19 @@ export const dbAction = async (action: string, payload: any): Promise<boolean> =
   try {
     let result: { error: any } | null = null;
     switch (action) {
-      case 'ADD_STUDENT':
-      case 'UPDATE_STUDENT': {
-        const snakePayload = {
+      case 'ADD_STUDENT': {
+        const snakePayload: any = {
           nis: String(payload.nis),
           name: payload.name,
           class: payload.class,
-          password: payload.password || '',
           status: payload.status || StudentStatus.BELUM_MASUK,
           room_id: payload.roomId || payload.room_id || null,
           violations: Number(payload.violations || 0)
         };
+        if (payload.password || payload.passkey) {
+          snakePayload.password = payload.password || payload.passkey || '';
+          snakePayload.passkey = payload.password || payload.passkey || '';
+        }
 
         let res = await supabase.from('students').upsert(snakePayload);
         if (res.error) {
@@ -762,15 +764,69 @@ export const dbAction = async (action: string, payload: any): Promise<boolean> =
             nis: String(payload.nis),
             name: payload.name,
             class: payload.class,
-            password: payload.password || '',
+            password: payload.password || payload.passkey || '',
             status: payload.status || StudentStatus.BELUM_MASUK,
             roomId: payload.roomId || payload.room_id || null,
             violations: Number(payload.violations || 0)
           };
           res = await supabase.from('students').upsert(camelPayload);
           if (res.error) {
-            console.warn("Supabase student camelCase upsert failed, trying raw:", res.error.message);
-            res = await supabase.from('students').upsert(payload);
+            console.warn("Supabase student camelCase upsert failed, trying passkey-only fallback:", res.error.message);
+            const passkeyOnlyPayload = {
+              nis: String(payload.nis),
+              name: payload.name,
+              class: payload.class,
+              passkey: payload.password || payload.passkey || '',
+              status: payload.status || StudentStatus.BELUM_MASUK,
+              room_id: payload.roomId || payload.room_id || null,
+              violations: Number(payload.violations || 0)
+            };
+            res = await supabase.from('students').upsert(passkeyOnlyPayload);
+            if (res.error) {
+              console.warn("Supabase student passkey-only upsert failed, trying raw:", res.error.message);
+              res = await supabase.from('students').upsert(payload);
+            }
+          }
+        }
+        result = res;
+        break;
+      }
+
+      case 'UPDATE_STUDENT': {
+        const updateFields: any = {};
+        if (payload.status !== undefined) updateFields.status = payload.status;
+        if (payload.violations !== undefined) updateFields.violations = Number(payload.violations || 0);
+        if (payload.name !== undefined) updateFields.name = payload.name;
+        if (payload.class !== undefined) updateFields.class = payload.class;
+        if (payload.roomId !== undefined || payload.room_id !== undefined) {
+          updateFields.room_id = payload.roomId || payload.room_id || null;
+        }
+        if (payload.password !== undefined || payload.passkey !== undefined) {
+          updateFields.password = payload.password || payload.passkey || '';
+          updateFields.passkey = payload.password || payload.passkey || '';
+        }
+
+        // 1. Coba update kolom spesifik terlebih dahulu (tanpa menimpa field lain)
+        let res = await supabase.from('students').update(updateFields).eq('nis', String(payload.nis));
+        if (res.error) {
+          console.warn("Supabase student update failed with dual passkey, trying without passkey:", res.error.message);
+          const { passkey, ...withoutPasskey } = updateFields;
+          res = await supabase.from('students').update(withoutPasskey).eq('nis', String(payload.nis));
+          if (res.error) {
+            const { password, ...withoutPassword } = updateFields;
+            res = await supabase.from('students').update(withoutPassword).eq('nis', String(payload.nis));
+            if (res.error) {
+              // Jika update gagal (misal data belum ada), gunakan upsert
+              const fullSnakePayload = {
+                nis: String(payload.nis),
+                name: payload.name || '',
+                class: payload.class || '',
+                status: payload.status || StudentStatus.BELUM_MASUK,
+                room_id: payload.roomId || payload.room_id || null,
+                violations: Number(payload.violations || 0)
+              };
+              res = await supabase.from('students').upsert(fullSnakePayload);
+            }
           }
         }
         result = res;
@@ -785,9 +841,35 @@ export const dbAction = async (action: string, payload: any): Promise<boolean> =
         result = await supabase.from('students').delete().in('nis', payload);
         break;
 
-      case 'BULK_UPDATE_STUDENTS':
-        result = await supabase.from('students').update(payload.updates).in('nis', payload.selectedNis);
+      case 'BULK_UPDATE_STUDENTS': {
+        const rawUpdates = payload?.updates || {};
+        const formattedUpdates: any = {};
+        if (rawUpdates.status !== undefined) formattedUpdates.status = rawUpdates.status;
+        if (rawUpdates.violations !== undefined) formattedUpdates.violations = Number(rawUpdates.violations || 0);
+        if (rawUpdates.roomId !== undefined || rawUpdates.room_id !== undefined) {
+          formattedUpdates.room_id = rawUpdates.roomId || rawUpdates.room_id || null;
+        }
+        if (rawUpdates.password !== undefined || rawUpdates.passkey !== undefined) {
+          formattedUpdates.password = rawUpdates.password || rawUpdates.passkey || '';
+        }
+
+        const nisList = Array.isArray(payload?.selectedNis) ? payload.selectedNis.map(String) : [];
+        let res = await supabase.from('students').update(formattedUpdates).in('nis', nisList);
+        if (res.error) {
+          console.warn("Supabase bulk update snake_case failed, trying camelCase:", res.error.message);
+          const camelUpdates: any = { ...formattedUpdates };
+          if (formattedUpdates.room_id !== undefined) {
+            delete camelUpdates.room_id;
+            camelUpdates.roomId = formattedUpdates.room_id;
+          }
+          res = await supabase.from('students').update(camelUpdates).in('nis', nisList);
+          if (res.error) {
+            res = await supabase.from('students').update(rawUpdates).in('nis', nisList);
+          }
+        }
+        result = res;
         break;
+      }
 
       case 'ADD_SESSION':
       case 'UPDATE_SESSION': {
@@ -842,9 +924,22 @@ export const dbAction = async (action: string, payload: any): Promise<boolean> =
           name: payload.name,
           capacity: Number(payload.capacity || 0),
           username: payload.username || '',
-          password: payload.password || ''
+          password: payload.password || '',
+          passkey: payload.password || ''
         };
-        result = await supabase.from('rooms').upsert(roomPayload);
+        let res = await supabase.from('rooms').upsert(roomPayload);
+        if (res.error) {
+          console.warn("Supabase room upsert failed with password column, trying passkey-only fallback:", res.error.message);
+          const passkeyRoomPayload = {
+            id: String(payload.id),
+            name: payload.name,
+            capacity: Number(payload.capacity || 0),
+            username: payload.username || '',
+            passkey: payload.password || ''
+          };
+          res = await supabase.from('rooms').upsert(passkeyRoomPayload);
+        }
+        result = res;
         break;
       }
 

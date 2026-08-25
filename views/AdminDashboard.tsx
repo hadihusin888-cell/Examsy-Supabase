@@ -32,7 +32,8 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   sessions, students, rooms, isSyncing, isProcessing = false, onLogout, onAction, onRefresh 
 }) => {
-  const [activeTab, setActiveTab] = useState<'SESSIONS' | 'STUDENTS' | 'ROOMS'>('SESSIONS');
+  const [activeTab, setActiveTab] = useState<'SESSIONS' | 'STUDENTS' | 'ROOMS' | 'SECURITY'>('SESSIONS');
+  const [isCopied, setIsCopied] = useState(false);
   
   // Modal states
   const [showAddSession, setShowAddSession] = useState(false);
@@ -49,6 +50,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showBulkDeleteSessionsConfirm, setShowBulkDeleteSessionsConfirm] = useState(false);
   const [showBulkRoomModal, setShowBulkRoomModal] = useState(false);
   const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
+  const [showStartAllConfirm, setShowStartAllConfirm] = useState(false);
+  const [showFinishAllConfirm, setShowFinishAllConfirm] = useState(false);
+  const [isProcessingAll, setIsProcessingAll] = useState(false);
 
   const [showAddRoom, setShowAddRoom] = useState(false);
   const [roomToEdit, setRoomToEdit] = useState<Room | null>(null);
@@ -284,6 +288,47 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleStartAllStudents = async () => {
+    if (students.length === 0) {
+      alert("Tidak ada data siswa dalam database.");
+      return;
+    }
+    setIsProcessingAll(true);
+    const allNis = students.map(s => String(s.nis));
+    const ok = await onAction('BULK_UPDATE_STUDENTS', { 
+      selectedNis: allNis, 
+      updates: { 
+        status: StudentStatus.BELUM_MASUK,
+        violations: 0
+      } 
+    });
+    setIsProcessingAll(false);
+    if (ok) {
+      setShowStartAllConfirm(false);
+      alert(`Berhasil memulai ujian! Status semua siswa (${allNis.length} siswa) telah diubah menjadi BELUM MASUK.`);
+    }
+  };
+
+  const handleFinishAllStudents = async () => {
+    if (students.length === 0) {
+      alert("Tidak ada data siswa dalam database.");
+      return;
+    }
+    setIsProcessingAll(true);
+    const allNis = students.map(s => String(s.nis));
+    const ok = await onAction('BULK_UPDATE_STUDENTS', { 
+      selectedNis: allNis, 
+      updates: { 
+        status: StudentStatus.BLOKIR 
+      } 
+    });
+    setIsProcessingAll(false);
+    if (ok) {
+      setShowFinishAllConfirm(false);
+      alert(`Berhasil menyelesaikan ujian! Status semua siswa (${allNis.length} siswa) telah diubah menjadi BLOKIR di database.`);
+    }
+  };
+
   const getStatusBadge = (status: StudentStatus) => {
     switch (status) {
       case StudentStatus.BELUM_MASUK: return <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">Belum Masuk</span>;
@@ -303,9 +348,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
              <h1 className="text-sm md:text-base font-black text-slate-900 tracking-tight uppercase hidden sm:block">Examsy Super Admin</h1>
           </div>
           <nav className="flex bg-slate-100 p-1 rounded-xl">
-            {(['SESSIONS', 'STUDENTS', 'ROOMS'] as const).map(tab => (
+            {(['SESSIONS', 'STUDENTS', 'ROOMS', 'SECURITY'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 md:px-5 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest transition-all cursor-pointer ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-                {tab === 'SESSIONS' ? 'Ujian' : tab === 'STUDENTS' ? 'Siswa' : 'Ruang'}
+                {tab === 'SESSIONS' ? 'Ujian' : tab === 'STUDENTS' ? 'Siswa' : tab === 'ROOMS' ? 'Ruang' : 'Keamanan DB'}
               </button>
             ))}
           </nav>
@@ -467,7 +512,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase leading-none">Database Siswa</h2>
                   <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-2">Database Terintegrasi ({students.length})</p>
                 </div>
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="flex gap-2">
                     <input type="text" placeholder="Cari Nama / NIS..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full lg:w-48 pl-6 pr-6 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm outline-none focus:border-indigo-500 shadow-sm" />
                     <select value={roomFilter} onChange={(e) => setRoomFilter(e.target.value)} className="bg-white border border-slate-200 rounded-2xl px-4 text-xs font-black uppercase text-slate-500 outline-none focus:border-indigo-500 shadow-sm">
@@ -475,6 +520,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
                   </div>
+
+                  {/* Kontrol Status Cepat: Mulai & Finish */}
+                  <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl border border-slate-200/80 shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => setShowStartAllConfirm(true)}
+                      className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-wider transition-all shadow-sm hover:shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer"
+                      title="Ubah semua status siswa menjadi BELUM MASUK & reset pelanggaran"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                      </svg>
+                      Mulai
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowFinishAllConfirm(true)}
+                      className="bg-rose-600 hover:bg-rose-700 active:scale-95 text-white px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-wider transition-all shadow-sm hover:shadow-rose-500/20 flex items-center gap-1.5 cursor-pointer"
+                      title="Ubah semua status siswa menjadi BLOKIR (Selesai/Kunci Ujian)"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+                      </svg>
+                      Finish
+                    </button>
+                  </div>
+
                   <button onClick={() => setStudentToAdd(true)} className="bg-indigo-600 text-white px-5 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg active:scale-95 transition-all"> + Siswa </button>
                   <button onClick={downloadTemplate} className="bg-emerald-600 text-white px-5 py-3.5 rounded-2xl font-black text-[10px] uppercase transition-all shadow-lg active:scale-95">Template</button>
                   <button onClick={() => fileInputRef.current?.click()} className="bg-slate-900 text-white px-5 py-3.5 rounded-2xl font-black text-[10px] uppercase transition-all shadow-lg active:scale-95">Impor CSV</button>
@@ -643,6 +715,120 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
              </div>
            </div>
         )}
+
+        {activeTab === 'SECURITY' && (
+          <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="bg-white p-8 md:p-10 rounded-[2.5rem] border border-slate-200 shadow-sm">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                <div>
+                  <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Keamanan Database Supabase</h2>
+                  <p className="text-slate-400 font-bold text-[9px] uppercase tracking-widest mt-2">Setup Row-Level Security (RLS) & Proteksi Data</p>
+                </div>
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2 shadow-sm shrink-0">
+                  <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+                  <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Pemberitahuan RLS</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 p-6 rounded-3xl mb-8">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight mb-2 flex items-center gap-2 text-indigo-600">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m0-6h.01M12 3a9 9 0 110 18 9 9 0 010-18z" />
+                  </svg>
+                  Mengapa Muncul Peringatan Keamanan?
+                </h3>
+                <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                  Supabase mendeteksi bahwa tabel <strong>students</strong>, <strong>sessions</strong>, dan <strong>rooms</strong> berada di skema publik dan dapat diakses/dimodifikasi oleh siapa saja jika memiliki URL project Anda karena Row-Level Security (RLS) belum diaktifkan. 
+                  <br /><br />
+                  Untuk mengamankan database namun tetap memastikan aplikasi ujian berjalan lancar, Anda harus mengaktifkan RLS dan membuat kebijakan (policy) akses publik/anonim agar aplikasi web tetap diizinkan melakukan operasi baca/tulis data ujian secara sah.
+                </p>
+              </div>
+
+              <div className="space-y-6">
+                <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">Langkah Mudah Penyelesaian:</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="p-5 bg-slate-50 border border-slate-150 rounded-2xl">
+                    <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs mb-3">1</div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">Salin Query</p>
+                    <p className="text-[11px] text-slate-600 font-semibold leading-normal">Klik tombol "Salin Script SQL" di bawah untuk menyalin seluruh perintah konfigurasi keamanan.</p>
+                  </div>
+
+                  <div className="p-5 bg-slate-50 border border-slate-150 rounded-2xl">
+                    <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs mb-3">2</div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">SQL Editor</p>
+                    <p className="text-[11px] text-slate-600 font-semibold leading-normal">Buka dashboard proyek Anda di <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline font-black">Supabase</a>, lalu masuk ke menu <strong>SQL Editor</strong>.</p>
+                  </div>
+
+                  <div className="p-5 bg-slate-50 border border-slate-150 rounded-2xl">
+                    <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs mb-3">3</div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">Tempel & Run</p>
+                    <p className="text-[11px] text-slate-600 font-semibold leading-normal">Buat query baru, tempel (paste) script SQL keamanan yang sudah disalin, lalu klik tombol <strong>Run</strong>.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 rounded-[2.5rem] p-8 md:p-10 text-white shadow-xl relative overflow-hidden border border-slate-800">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 relative z-10">
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight leading-none mb-1 text-white">Script SQL Row-Level Security</h3>
+                  <p className="text-slate-400 font-bold text-[9px] uppercase tracking-widest">Query Lengkap untuk Tabel Students, Sessions, & Rooms</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sqlText = `ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;\nALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;\nALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;\n\nDROP POLICY IF EXISTS "Allow public read students" ON public.students;\nDROP POLICY IF EXISTS "Allow public insert students" ON public.students;\nDROP POLICY IF EXISTS "Allow public update students" ON public.students;\nDROP POLICY IF EXISTS "Allow public delete students" ON public.students;\n\nDROP POLICY IF EXISTS "Allow public read sessions" ON public.sessions;\nDROP POLICY IF EXISTS "Allow public insert sessions" ON public.sessions;\nDROP POLICY IF EXISTS "Allow public update sessions" ON public.sessions;\nDROP POLICY IF EXISTS "Allow public delete sessions" ON public.sessions;\n\nDROP POLICY IF EXISTS "Allow public read rooms" ON public.rooms;\nDROP POLICY IF EXISTS "Allow public insert rooms" ON public.rooms;\nDROP POLICY IF EXISTS "Allow public update rooms" ON public.rooms;\nDROP POLICY IF EXISTS "Allow public delete rooms" ON public.rooms;\n\nCREATE POLICY "Allow public read students" ON public.students FOR SELECT TO anon USING (true);\nCREATE POLICY "Allow public insert students" ON public.students FOR INSERT TO anon WITH CHECK (true);\nCREATE POLICY "Allow public update students" ON public.students FOR UPDATE TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "Allow public delete students" ON public.students FOR DELETE TO anon USING (true);\n\nCREATE POLICY "Allow public read sessions" ON public.sessions FOR SELECT TO anon USING (true);\nCREATE POLICY "Allow public insert sessions" ON public.sessions FOR INSERT TO anon WITH CHECK (true);\nCREATE POLICY "Allow public update sessions" ON public.sessions FOR UPDATE TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "Allow public delete sessions" ON public.sessions FOR DELETE TO anon USING (true);\n\nCREATE POLICY "Allow public read rooms" ON public.rooms FOR SELECT TO anon USING (true);\nCREATE POLICY "Allow public insert rooms" ON public.rooms FOR INSERT TO anon WITH CHECK (true);\nCREATE POLICY "Allow public update rooms" ON public.rooms FOR UPDATE TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "Allow public delete rooms" ON public.rooms FOR DELETE TO anon USING (true);\n\nDO $$\nBEGIN\n    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='students' AND column_name='password') THEN\n        ALTER TABLE public.students RENAME COLUMN password TO passkey;\n    END IF;\n    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='rooms' AND column_name='password') THEN\n        ALTER TABLE public.rooms RENAME COLUMN password TO passkey;\n    END IF;\nEND $$;`;
+                    navigator.clipboard.writeText(sqlText);
+                    setIsCopied(true);
+                    setTimeout(() => setIsCopied(false), 3000);
+                  }}
+                  className={`px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center gap-2 cursor-pointer ${
+                    isCopied ? 'bg-emerald-600 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  }`}
+                >
+                  {isCopied ? (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Berhasil Disalin!
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                      </svg>
+                      Salin Script SQL
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 font-mono text-[11px] leading-relaxed text-indigo-300 max-h-60 overflow-y-auto custom-scrollbar relative">
+                <p className="text-slate-500 font-sans font-bold text-[9px] uppercase tracking-widest mb-4">--- SCRIPT MULAI ---</p>
+                <span className="text-slate-400">-- 1. Mengaktifkan Row Level Security (RLS) pada semua tabel</span><br />
+                <span className="text-emerald-400">ALTER TABLE</span> public.students <span className="text-emerald-400">ENABLE ROW LEVEL SECURITY</span>;<br />
+                <span className="text-emerald-400">ALTER TABLE</span> public.sessions <span className="text-emerald-400">ENABLE ROW LEVEL SECURITY</span>;<br />
+                <span className="text-emerald-400">ALTER TABLE</span> public.rooms <span className="text-emerald-400">ENABLE ROW LEVEL SECURITY</span>;<br /><br />
+
+                <span className="text-slate-400">-- 2. Menghapus Policy lama jika ada (untuk mencegah konflik)</span><br />
+                <span className="text-rose-400">DROP POLICY IF EXISTS</span> "Allow public read students" <span className="text-emerald-400">ON</span> public.students;<br />
+                <span className="text-rose-400">DROP POLICY IF EXISTS</span> "Allow public insert students" <span className="text-emerald-400">ON</span> public.students;<br />
+                <span className="text-rose-400">DROP POLICY IF EXISTS</span> "Allow public update students" <span className="text-emerald-400">ON</span> public.students;<br />
+                <span className="text-rose-400">DROP POLICY IF EXISTS</span> "Allow public delete students" <span className="text-emerald-400">ON</span> public.students;<br /><br />
+
+                <span className="text-slate-400">-- 3. Membuat Policy baru untuk akses anonim agar aplikasi web tetap berjalan</span><br />
+                <span className="text-emerald-400">CREATE POLICY</span> "Allow public read students" <span className="text-emerald-400">ON</span> public.students <span className="text-emerald-400">FOR SELECT TO</span> anon <span className="text-emerald-400">USING</span> (true);<br />
+                <span className="text-emerald-400">CREATE POLICY</span> "Allow public insert students" <span className="text-emerald-400">ON</span> public.students <span className="text-emerald-400">FOR INSERT TO</span> anon <span className="text-emerald-400">WITH CHECK</span> (true);<br />
+                <span className="text-emerald-400">CREATE POLICY</span> "Allow public update students" <span className="text-emerald-400">ON</span> public.students <span className="text-emerald-400">FOR UPDATE TO</span> anon <span className="text-emerald-400">USING</span> (true) <span className="text-emerald-400">WITH CHECK</span> (true);<br />
+                <span className="text-emerald-400">CREATE POLICY</span> "Allow public delete students" <span className="text-emerald-400">ON</span> public.students <span className="text-emerald-400">FOR DELETE TO</span> anon <span className="text-emerald-400">USING</span> (true);<br /><br />
+
+                <span className="text-slate-500 font-sans font-bold text-[9px] uppercase tracking-widest mt-4">... (dan seterusnya untuk tabel sessions & rooms) ...</span>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* MODAL VIEW STUDENTS IN ROOM */}
@@ -710,6 +896,77 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               <button onClick={() => setShowBulkRoomModal(false)} className="w-full mt-8 text-slate-400 font-bold py-2 text-[10px] uppercase tracking-widest hover:text-slate-600 transition-colors">Batalkan Pemindahan</button>
            </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Mulai (Reset Semua Siswa ke BELUM_MASUK) */}
+      {showStartAllConfirm && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[250] flex items-center justify-center p-6 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-8 md:p-10 text-center animate-in zoom-in-95 duration-200 shadow-2xl border border-slate-100">
+            <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight mb-2">Mulai Ujian Semua Siswa?</h3>
+            <p className="text-slate-500 text-xs font-bold leading-relaxed mb-8">
+              Aksi ini akan mengubah status <strong>SEMUA SISWA ({students.length} peserta)</strong> di database menjadi <span className="text-emerald-600 font-black">BELUM MASUK</span> serta mereset pelanggaran ke 0 sehingga seluruh siswa siap memulai sesi ujian baru.
+            </p>
+            <div className="flex gap-3">
+              <button 
+                type="button"
+                disabled={isProcessingAll}
+                onClick={() => setShowStartAllConfirm(false)} 
+                className="flex-1 h-14 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all cursor-pointer disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button 
+                type="button"
+                disabled={isProcessingAll}
+                onClick={handleStartAllStudents} 
+                className="flex-1 h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-emerald-200 cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                {isProcessingAll ? 'Memproses...' : 'Ya, Mulai Semua'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Finish (Kunci Semua Siswa ke BLOKIR) */}
+      {showFinishAllConfirm && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[250] flex items-center justify-center p-6 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-8 md:p-10 text-center animate-in zoom-in-95 duration-200 shadow-2xl border border-slate-100">
+            <div className="w-20 h-20 bg-rose-50 text-rose-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight mb-2">Finish & Kunci Semua Siswa?</h3>
+            <p className="text-slate-500 text-xs font-bold leading-relaxed mb-8">
+              Aksi ini akan mengubah status <strong>SEMUA SISWA ({students.length} peserta)</strong> di database menjadi <span className="text-rose-600 font-black">BLOKIR</span>. Siswa yang sedang mengerjakan ujian akan langsung terkunci / keluar secara real-time.
+            </p>
+            <div className="flex gap-3">
+              <button 
+                type="button"
+                disabled={isProcessingAll}
+                onClick={() => setShowFinishAllConfirm(false)} 
+                className="flex-1 h-14 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all cursor-pointer disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button 
+                type="button"
+                disabled={isProcessingAll}
+                onClick={handleFinishAllStudents} 
+                className="flex-1 h-14 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-rose-200 cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                {isProcessingAll ? 'Memproses...' : 'Ya, Kunci Semua'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
