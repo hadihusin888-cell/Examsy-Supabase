@@ -96,19 +96,41 @@ const StudentLogin: React.FC<StudentLoginProps> = ({ sessions, students, onLogin
     }
   }, []);
 
+  const handleNisChange = (val: string) => {
+    const trimmedVal = val.trim();
+    setFormData(prev => {
+      const next = { ...prev, nis: val };
+      // Auto-populate class if student is found and class not chosen yet
+      if (trimmedVal && !prev.studentClass) {
+        const found = students.find(s => String(s.nis).trim() === trimmedVal);
+        if (found && found.class) {
+          next.studentClass = String(found.class).trim();
+        }
+      }
+      return next;
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isProcessing || isVerifying) return;
     setError('');
     setIsVerifying(true);
 
-    const inputNis = String(formData.nis).trim();
-    const inputPass = String(formData.password).trim();
-    const inputClass = String(formData.studentClass).trim();
-    const inputPin = String(formData.pin).trim().toUpperCase();
+    const inputNis = String(formData.nis || '').trim();
+    const inputPass = String(formData.password || '').trim();
+    const inputClass = String(formData.studentClass || '').trim();
+    const inputPin = String(formData.pin || '').trim().toUpperCase();
 
     try {
-      const result = await validateStudentLogin(inputNis, inputPass, inputClass, inputPin);
+      const result = await validateStudentLogin(
+        inputNis, 
+        inputPass, 
+        inputClass, 
+        inputPin, 
+        students, 
+        sessions
+      );
       
       if (!result.success) {
         setError(result.error || 'Autentikasi gagal.');
@@ -175,7 +197,7 @@ const StudentLogin: React.FC<StudentLoginProps> = ({ sessions, students, onLogin
               required
               disabled={isProcessing}
               value={formData.nis}
-              onChange={e => setFormData({...formData, nis: e.target.value})}
+              onChange={e => handleNisChange(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold disabled:opacity-70 text-sm"
               placeholder="Contoh: 1234"
             />

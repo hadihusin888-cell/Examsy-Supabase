@@ -418,23 +418,41 @@ export const syncData = (
 };
 
 export const getDirectStudentAndSession = async (nis: string, sessionId: string): Promise<{ student: Student | null; session: ExamSession | null }> => {
-  try {
-    if (checkIsOfflineFallbackActive()) {
-      throw new Error("Offline mode");
-    }
-    const [studentRes, sessionRes] = await Promise.all([
-      supabase.from('students').select('*').eq('nis', nis).single(),
-      supabase.from('sessions').select('*').eq('id', sessionId).single()
-    ]);
+  const cleanNis = String(nis).trim();
+  const cleanSessionId = String(sessionId).trim();
 
-    return {
-      student: studentRes.data ? (studentRes.data as Student) : null,
-      session: sessionRes.data ? (sessionRes.data as ExamSession) : null
-    };
-  } catch (err) {
-    console.warn("Direct Supabase fetch failed:", err);
-    return { student: null, session: null };
+  // Try Supabase first if online
+  if (!checkIsOfflineFallbackActive()) {
+    try {
+      const [studentRes, sessionRes] = await Promise.all([
+        supabase.from('students').select('*').eq('nis', cleanNis).maybeSingle(),
+        supabase.from('sessions').select('*').eq('id', cleanSessionId).maybeSingle()
+      ]);
+
+      const student = studentRes.data ? normalizeStudent(studentRes.data) : null;
+      const session = sessionRes.data ? normalizeSession(sessionRes.data) : null;
+
+      if (student && session) {
+        return { student, session };
+      }
+    } catch (err) {
+      console.warn("Direct Supabase fetch failed, trying local fallback:", err);
+    }
   }
+
+  // Fallback to local cache
+  const cachedStudentsRaw = localStorage.getItem("examsy_cache_students");
+  const cachedSessionsRaw = localStorage.getItem("examsy_cache_sessions");
+  const cachedStudents: Student[] = cachedStudentsRaw ? JSON.parse(cachedStudentsRaw) : DEFAULT_FALLBACK_STUDENTS;
+  const cachedSessions: ExamSession[] = cachedSessionsRaw ? JSON.parse(cachedSessionsRaw) : DEFAULT_FALLBACK_SESSIONS;
+
+  const matchedStudent = findStudentInList(cachedStudents, cleanNis) || null;
+  const matchedSession = cachedSessions.find(s => String(s.id).trim() === cleanSessionId) || null;
+
+  return {
+    student: matchedStudent,
+    session: matchedSession
+  };
 };
 
 // Global Supabase Broadcast Channel (0 DB reads for instant client-to-client notifications)
@@ -584,10 +602,11 @@ export const subscribeAllStudents = (callback: (event: string, student: Student,
 };
 
 // Helper for lenient class matching
-const isClassMatchingLenient = (studentClass: string, inputClass: string): boolean => {
+export const isClassMatchingLenient = (studentClass: string, inputClass: string): boolean => {
   const sClass = String(studentClass || '').trim().toUpperCase();
   const iClass = String(inputClass || '').trim().toUpperCase();
   
+  if (!sClass || !iClass) return true; // If one is not specified, be lenient
   if (sClass === iClass) return true;
   
   // If student class is e.g. "9A" and input class is "9", or "Kelas 9"
@@ -595,135 +614,246 @@ const isClassMatchingLenient = (studentClass: string, inputClass: string): boole
   if (sClass.startsWith(iClass) || iClass.startsWith(sClass)) return true;
   if (sClass.includes(iClass) || iClass.includes(sClass)) return true;
   
-  // Roman numerals compatibility
+  // Roman numerals and common grade prefix compatibility
   const romanMap: Record<string, string[]> = {
-    '7': ['VII', 'KLS 7', 'KLS VII', 'KELAS VII', 'KELAS 7'],
-    '8': ['VIII', 'KLS 8', 'KLS VIII', 'KELAS VIII', 'KELAS 8'],
-    '9': ['IX', 'KLS 9', 'KLS IX', 'KELAS IX', 'KELAS 9']
+    '7': ['VII', 'KLS 7', 'KLS VII', 'KELAS VII', 'KELAS 7', '7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H', '7I'],
+    '8': ['VIII', 'KLS 8', 'KLS VIII', 'KELAS VIII', 'KELAS 8', '8A', '8B', '8C', '8D', '8E', '8F', '8G', '8H', '8I'],
+    '9': ['IX', 'KLS 9', 'KLS IX', 'KELAS IX', 'KELAS 9', '9A', '9B', '9C', '9D', '9E', '9F', '9G', '9H', '9I'],
+    '10': ['X', 'KLS 10', 'KLS X', 'KELAS X', 'KELAS 10'],
+    '11': ['XI', 'KLS 11', 'KLS XI', 'KELAS XI', 'KELAS 11'],
+    '12': ['XII', 'KLS 12', 'KLS XII', 'KELAS XII', 'KELAS 12']
   };
   
-  if (romanMap[iClass]) {
-    for (const alt of romanMap[iClass]) {
-      if (sClass.includes(alt) || sClass === alt) return true;
-    }
-  }
-  
-  if (romanMap[sClass]) {
-    for (const alt of romanMap[sClass]) {
-      if (iClass.includes(alt) || iClass === alt) return true;
-    }
+  for (const [key, alts] of Object.entries(romanMap)) {
+    const allForms = [key, ...alts];
+    const sMatches = allForms.some(f => sClass === f || sClass.includes(f) || sClass.startsWith(f));
+    const iMatches = allForms.some(f => iClass === f || iClass.includes(f) || iClass.startsWith(f));
+    if (sMatches && iMatches) return true;
   }
 
   return false;
+};
+
+// Helper to find student in list with resilient matching
+export const findStudentInList = (list: Student[], targetNis: string): Student | undefined => {
+  const cleanNis = String(targetNis).trim();
+  if (!cleanNis || !Array.isArray(list)) return undefined;
+
+  // 1. Exact string match
+  let found = list.find(s => String(s.nis).trim() === cleanNis);
+  if (found) return found;
+
+  // 2. Case-insensitive string match
+  found = list.find(s => String(s.nis).trim().toLowerCase() === cleanNis.toLowerCase());
+  if (found) return found;
+
+  // 3. Numeric match (handling leading zeroes or number type diffs)
+  const numTarget = parseInt(cleanNis, 10);
+  if (!isNaN(numTarget)) {
+    found = list.find(s => {
+      const numS = parseInt(String(s.nis).trim(), 10);
+      return !isNaN(numS) && numS === numTarget;
+    });
+    if (found) return found;
+  }
+
+  return undefined;
 };
 
 export const validateStudentLogin = async (
   nis: string,
   pass: string,
   studentClass: string,
-  pin: string
+  pin: string,
+  fallbackStudents?: Student[],
+  fallbackSessions?: ExamSession[]
 ): Promise<{ success: boolean; student?: Student; session?: ExamSession; error?: string }> => {
-  const trimmedNis = String(nis).trim();
-  const trimmedPass = String(pass).trim();
-  const trimmedClass = String(studentClass).trim();
-  const trimmedPin = String(pin).trim().toUpperCase();
+  const trimmedNis = String(nis || '').trim();
+  const trimmedPass = String(pass || '').trim();
+  const trimmedClass = String(studentClass || '').trim();
+  const trimmedPin = String(pin || '').trim().toUpperCase();
 
-  try {
-    if (checkIsOfflineFallbackActive()) {
-      throw new Error("Quota simulation active");
+  if (!trimmedNis) {
+    return { success: false, error: 'Nomor Induk Siswa (NIS) wajib diisi.' };
+  }
+  if (!trimmedPass) {
+    return { success: false, error: 'Password wajib diisi.' };
+  }
+
+  // Get local deleted NIS list
+  const deletedNis = getDeletedIds("examsy_deleted_students");
+  if (deletedNis.includes(trimmedNis)) {
+    return { success: false, error: `NIS ${trimmedNis} telah dihapus dari database peserta.` };
+  }
+
+  let student: Student | null = null;
+  let isFromRemoteDb = false;
+
+  // 1. Try querying Supabase first (if not in offline fallback mode)
+  if (!checkIsOfflineFallbackActive()) {
+    try {
+      const { data, error: studentErr } = await supabase
+        .from('students')
+        .select('*')
+        .eq('nis', trimmedNis)
+        .maybeSingle();
+
+      if (!studentErr && data) {
+        student = normalizeStudent(data);
+        isFromRemoteDb = true;
+      }
+    } catch (e) {
+      console.warn("Supabase direct query failed, will check cache/fallback:", e);
     }
+  }
 
-    const { data: student, error: studentErr } = await supabase
-      .from('students')
-      .select('*')
-      .eq('nis', trimmedNis)
-      .single();
+  // 2. If not found in remote DB or remote query failed, search local storage cache and memory props
+  if (!student) {
+    const getCachedStudents = (): Student[] => {
+      try {
+        const raw = localStorage.getItem("examsy_cache_students");
+        return raw ? JSON.parse(raw) : DEFAULT_FALLBACK_STUDENTS;
+      } catch (_) {
+        return DEFAULT_FALLBACK_STUDENTS;
+      }
+    };
 
-    if (studentErr || !student) {
-      return { success: false, error: 'NIS atau Password Anda tidak terdaftar.' };
+    const cachedList = getCachedStudents().filter(s => !deletedNis.includes(String(s.nis)));
+    student = findStudentInList(cachedList, trimmedNis) || null;
+
+    if (!student && Array.isArray(fallbackStudents) && fallbackStudents.length > 0) {
+      student = findStudentInList(fallbackStudents.filter(s => !deletedNis.includes(String(s.nis))), trimmedNis) || null;
     }
-
-    if (String(student.password || '').trim() !== trimmedPass) {
-      return { success: false, error: 'NIS atau Password Anda tidak terdaftar.' };
-    }
-
-    if (student.status === StudentStatus.BLOKIR) {
-      return { success: false, error: 'Akses ditolak. Akun Anda dalam status BLOKIR.' };
-    }
-
-    if (student.status === StudentStatus.SELESAI) {
-      return { success: false, error: 'Anda telah menyelesaikan sesi ujian ini.' };
-    }
-
-    if (!isClassMatchingLenient(student.class, trimmedClass)) {
-      return { success: false, error: `Sinkronisasi Gagal: Anda terdaftar di Kelas ${student.class}, bukan Kelas ${trimmedClass}.` };
-    }
-
-    const { data: rawSessions, error: sessionErr } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('class', trimmedClass);
-
-    if (sessionErr || !rawSessions) {
-      return { success: false, error: 'PIN Sesi tidak aktif atau tidak ditemukan.' };
-    }
-
-    const sessions = rawSessions.map(normalizeSession);
-    const matchedSession = sessions.find(
-      sess => sess.isActive && String(sess.pin || '').trim().toUpperCase() === trimmedPin
-    );
-
-    if (!matchedSession) {
-      return { success: false, error: 'PIN Sesi tidak aktif atau tidak ditemukan.' };
-    }
-
-    const normStudent = normalizeStudent(student);
-    updateLocalCacheList('UPDATE_STUDENT', normStudent);
-    updateLocalCacheList('UPDATE_SESSION', matchedSession);
-
-    return { success: true, student: normStudent, session: matchedSession };
-  } catch (err) {
-    console.warn("Optimized DB Login failed, attempting cache verification as safe fallback:", err);
-    setOfflineFallbackActive(true);
-
-    const cachedStudentsRaw = localStorage.getItem("examsy_cache_students");
-    const cachedStudents: Student[] = cachedStudentsRaw ? JSON.parse(cachedStudentsRaw) : DEFAULT_FALLBACK_STUDENTS;
-    const student = cachedStudents.find(s => String(s.nis).trim() === trimmedNis);
 
     if (!student) {
-      return { success: false, error: 'NIS atau Password tidak ditemukan dalam sistem lokal.' };
+      student = findStudentInList(DEFAULT_FALLBACK_STUDENTS.filter(s => !deletedNis.includes(String(s.nis))), trimmedNis) || null;
     }
+  }
 
-    if (String(student.password || '').trim() !== trimmedPass) {
-      return { success: false, error: 'NIS atau Password Anda salah (Verifikasi Offline).' };
+  // 3. If student is STILL not found in DB or local cache
+  if (!student) {
+    return { 
+      success: false, 
+      error: `NIS "${trimmedNis}" tidak terdaftar di database. Pastikan NIS sudah diinput oleh Admin/Proktor.` 
+    };
+  }
+
+  // 4. Verify password
+  const studentPassword = String(student.password || (student as any).passkey || (student as any).Password || '').trim();
+  if (studentPassword !== trimmedPass) {
+    // Check if case mismatch
+    if (studentPassword.toLowerCase() === trimmedPass.toLowerCase()) {
+      return { 
+        success: false, 
+        error: `Password untuk NIS ${trimmedNis} salah huruf besar/kecil. Periksa tombol Caps Lock Anda.` 
+      };
     }
+    return { 
+      success: false, 
+      error: `Password untuk NIS ${trimmedNis} tidak sesuai. Silakan periksa kembali password Anda.` 
+    };
+  }
 
-    if (student.status === StudentStatus.BLOKIR) {
-      return { success: false, error: 'Akses ditolak. Akun Anda dalam status BLOKIR.' };
+  // 5. Check student status
+  if (student.status === StudentStatus.BLOKIR) {
+    return { 
+      success: false, 
+      error: 'Akses ditolak: Status akun Anda saat ini DIBLOKIR. Silakan hubungi Proktor atau Admin untuk membuka akses.' 
+    };
+  }
+
+  if (student.status === StudentStatus.SELESAI) {
+    return { 
+      success: false, 
+      error: 'Anda telah menyelesaikan sesi ujian ini. Akses masuk ditutup.' 
+    };
+  }
+
+  // 6. Check Class match (lenient)
+  if (trimmedClass && student.class && !isClassMatchingLenient(student.class, trimmedClass)) {
+    return { 
+      success: false, 
+      error: `Sinkronisasi Kelas: Anda terdaftar di Kelas ${student.class}, namun memilih Kelas ${trimmedClass}. Pilih Kelas ${student.class} pada dropdown.` 
+    };
+  }
+
+  // 7. Find Matching Exam Session by PIN and Class
+  let matchedSession: ExamSession | null = null;
+  const deletedSessionIds = getDeletedIds("examsy_deleted_sessions");
+
+  // A. Try Supabase for sessions first
+  if (!checkIsOfflineFallbackActive()) {
+    try {
+      const { data: rawSessions, error: sessionErr } = await supabase
+        .from('sessions')
+        .select('*');
+
+      if (!sessionErr && rawSessions && rawSessions.length > 0) {
+        const sessions = rawSessions
+          .map(normalizeSession)
+          .filter(sess => !deletedSessionIds.includes(String(sess.id)));
+
+        matchedSession = sessions.find(sess => 
+          sess.isActive && 
+          String(sess.pin || '').trim().toUpperCase() === trimmedPin &&
+          (!trimmedClass || isClassMatchingLenient(sess.class, trimmedClass) || isClassMatchingLenient(sess.class, student!.class))
+        ) || null;
+      }
+    } catch (e) {
+      console.warn("Supabase sessions query failed, will check cache/fallback:", e);
     }
+  }
 
-    if (student.status === StudentStatus.SELESAI) {
-      return { success: false, error: 'Anda telah menyelesaikan sesi ujian ini.' };
-    }
+  // B. Fallback to cached sessions
+  if (!matchedSession) {
+    const getCachedSessions = (): ExamSession[] => {
+      try {
+        const raw = localStorage.getItem("examsy_cache_sessions");
+        return raw ? JSON.parse(raw) : DEFAULT_FALLBACK_SESSIONS;
+      } catch (_) {
+        return DEFAULT_FALLBACK_SESSIONS;
+      }
+    };
 
-    if (!isClassMatchingLenient(student.class, trimmedClass)) {
-      return { success: false, error: `Sinkronisasi Gagal: Anda terdaftar di Kelas ${student.class}, bukan Kelas ${trimmedClass}.` };
-    }
-
-    const cachedSessionsRaw = localStorage.getItem("examsy_cache_sessions");
-    const cachedSessions: ExamSession[] = cachedSessionsRaw ? JSON.parse(cachedSessionsRaw) : DEFAULT_FALLBACK_SESSIONS;
-    const matchedSession = cachedSessions.find(sess => 
+    const cachedSessions = getCachedSessions().filter(sess => !deletedSessionIds.includes(String(sess.id)));
+    matchedSession = cachedSessions.find(sess => 
       sess.isActive && 
-      isClassMatchingLenient(sess.class, trimmedClass) && 
-      String(sess.pin || '').trim().toUpperCase() === trimmedPin
-    );
+      String(sess.pin || '').trim().toUpperCase() === trimmedPin &&
+      (!trimmedClass || isClassMatchingLenient(sess.class, trimmedClass) || isClassMatchingLenient(sess.class, student!.class))
+    ) || null;
+
+    if (!matchedSession && Array.isArray(fallbackSessions) && fallbackSessions.length > 0) {
+      matchedSession = fallbackSessions
+        .filter(sess => !deletedSessionIds.includes(String(sess.id)))
+        .find(sess => 
+          sess.isActive && 
+          String(sess.pin || '').trim().toUpperCase() === trimmedPin &&
+          (!trimmedClass || isClassMatchingLenient(sess.class, trimmedClass) || isClassMatchingLenient(sess.class, student!.class))
+        ) || null;
+    }
 
     if (!matchedSession) {
-      return { success: false, error: 'PIN Sesi tidak aktif atau tidak ditemukan.' };
+      matchedSession = DEFAULT_FALLBACK_SESSIONS
+        .filter(sess => !deletedSessionIds.includes(String(sess.id)))
+        .find(sess => 
+          sess.isActive && 
+          String(sess.pin || '').trim().toUpperCase() === trimmedPin
+        ) || null;
     }
-
-    return { success: true, student, session: matchedSession };
   }
+
+  if (!matchedSession) {
+    return { 
+      success: false, 
+      error: `PIN Sesi "${trimmedPin}" tidak aktif, salah, atau tidak sesuai dengan kelas Anda. Tanyakan PIN yang benar ke Pengawas/Proktor.` 
+    };
+  }
+
+  const normStudent = normalizeStudent(student);
+  updateLocalCacheList('UPDATE_STUDENT', normStudent);
+  updateLocalCacheList('UPDATE_SESSION', matchedSession);
+
+  return { success: true, student: normStudent, session: matchedSession };
 };
 
 export const dbAction = async (action: string, payload: any): Promise<boolean> => {
