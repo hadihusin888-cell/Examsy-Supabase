@@ -367,7 +367,7 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
         <div className={`absolute transition-all duration-500 z-[200] items-center flex bg-black/40 backdrop-blur-xl border border-white/10 rounded-[1.5rem] shadow-2xl transition-opacity pointer-events-auto
           ${isZoomVisible ? 'opacity-40 hover:opacity-100' : 'opacity-[0.15] hover:opacity-100'}
           ${isMobileLandscape 
-            ? 'top-1/2 right-2 bottom-auto translate-y-[-50%] flex-col scale-[0.65] p-1.5' 
+            ? 'bottom-2 left-1/2 -translate-x-1/2 flex-row scale-[0.75] p-1.5' 
             : 'bottom-6 right-4 flex-col md:bottom-10 md:left-1/2 md:right-auto md:translate-x-[-50%] md:flex-row md:scale-100 max-md:scale-[0.8] max-md:bottom-4 p-2'}`}>
            <button onClick={(e) => { e.stopPropagation(); handleZoom(0.1); }} className="w-10 h-10 md:w-11 md:h-11 flex items-center justify-center bg-white/5 hover:bg-indigo-600 text-white rounded-xl transition-all active:scale-90">
              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
@@ -382,7 +382,7 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
 
         {/* MANUAL SCROLL BUTTONS FOR MOBILE & TABLETS */}
         {isTabletOrMobile && (
-          <div className={`absolute right-4 top-1/2 -translate-y-1/2 z-[200] flex flex-col gap-3 transition-all duration-500 ${isZoomVisible ? 'opacity-40 hover:opacity-100' : 'opacity-[0.15] hover:opacity-100'}`}>
+          <div className={`absolute top-1/2 -translate-y-1/2 z-[200] flex flex-col gap-3 transition-all duration-500 ${isZoomVisible ? 'opacity-40 hover:opacity-100' : 'opacity-[0.15] hover:opacity-100'} ${isMobileLandscape ? 'scale-[0.75] right-2' : 'scale-100 right-4'}`}>
             <button 
               onClick={(e) => { e.stopPropagation(); handleAutoScroll('up'); }}
               className="w-12 h-12 flex items-center justify-center bg-black/40 backdrop-blur-xl border border-white/10 text-white rounded-2xl shadow-2xl active:scale-90 transition-all"

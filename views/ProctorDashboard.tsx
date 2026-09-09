@@ -63,17 +63,25 @@ const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-50 font-sans">
       {/* HEADER - RESPONSIVE */}
-      <header className="bg-slate-950 px-4 md:px-8 py-4 flex items-center justify-between shadow-md z-50 shrink-0 border-b border-slate-800">
+      <header className="bg-white border-b border-slate-200/85 px-4 md:px-10 py-4 md:py-5 flex items-center justify-between shrink-0 z-50 shadow-sm">
         <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
-           <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black shrink-0 text-sm md:text-base">P</div>
+           <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black shrink-0 text-sm md:text-base italic shadow-lg shadow-indigo-100">P</div>
            <div className="overflow-hidden">
-              <h1 className="text-white font-black uppercase tracking-tight text-sm md:text-base truncate">{(room && room.name) || 'RUANG'}</h1>
+              <h1 className="text-slate-900 font-black uppercase tracking-tight text-xs md:text-sm truncate">{(room && room.name) || 'RUANG'}</h1>
               <p className="text-slate-400 text-[8px] md:text-[9px] font-black uppercase tracking-widest opacity-80">Proktor Ruang</p>
            </div>
         </div>
-        <div className="flex items-center gap-3 md:gap-6 shrink-0">
-          {(globalSyncing || isProcessing) && <div className="w-3.5 h-3.5 md:w-4 md:h-4 border-2 border-indigo-400/30 border-t-white rounded-full animate-spin"></div>}
-          <button onClick={onLogout} className="text-slate-300 hover:text-white font-black text-[10px] md:text-xs uppercase tracking-widest transition-colors cursor-pointer">Keluar</button>
+        <div className="flex items-center gap-2 md:gap-6 shrink-0">
+          <div className="flex items-center gap-1.5 md:gap-3 bg-slate-50 px-2.5 md:px-4 py-1.5 md:py-2 rounded-xl border border-slate-100">
+             <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${globalSyncing || isProcessing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+             <span className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest">{globalSyncing || isProcessing ? 'Syncing' : 'Online'}</span>
+          </div>
+          <button onClick={onLogout} className="text-slate-400 hover:text-rose-600 font-black text-[10px] md:text-xs uppercase tracking-wider cursor-pointer flex items-center gap-1 bg-slate-100/50 hover:bg-rose-50 px-3 py-1.5 md:py-2 rounded-xl border border-slate-200/30 transition-all active:scale-95">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span className="hidden sm:inline">Logout</span>
+          </button>
         </div>
       </header>
 
