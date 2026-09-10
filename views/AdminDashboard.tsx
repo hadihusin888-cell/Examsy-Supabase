@@ -32,7 +32,7 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   sessions, students, rooms, isSyncing, isProcessing = false, onLogout, onAction, onRefresh 
 }) => {
-  const [activeTab, setActiveTab] = useState<'SESSIONS' | 'STUDENTS' | 'ROOMS' | 'SECURITY'>('SESSIONS');
+  const [activeTab, setActiveTab] = useState<'SESSIONS' | 'STUDENTS' | 'ROOMS'>('SESSIONS');
   const [isCopied, setIsCopied] = useState(false);
   
   // Modal states
@@ -348,9 +348,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
              <h1 className="text-xs md:text-base font-black text-slate-900 tracking-tight uppercase">Examsy Super Admin</h1>
           </div>
           <nav className="hidden md:flex bg-slate-100 p-1 rounded-xl border border-slate-200/50">
-            {(['SESSIONS', 'STUDENTS', 'ROOMS', 'SECURITY'] as const).map(tab => (
+            {(['SESSIONS', 'STUDENTS', 'ROOMS'] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest transition-all cursor-pointer ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-                {tab === 'SESSIONS' ? 'Ujian' : tab === 'STUDENTS' ? 'Siswa' : tab === 'ROOMS' ? 'Ruang' : 'Keamanan DB'}
+                {tab === 'SESSIONS' ? 'Ujian' : tab === 'STUDENTS' ? 'Siswa' : 'Ruang'}
               </button>
             ))}
           </nav>
@@ -721,119 +721,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
            </div>
         )}
 
-        {activeTab === 'SECURITY' && (
-          <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="bg-white p-8 md:p-10 rounded-[2.5rem] border border-slate-200 shadow-sm">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">Keamanan Database Supabase</h2>
-                  <p className="text-slate-400 font-bold text-[9px] uppercase tracking-widest mt-2">Setup Row-Level Security (RLS) & Proteksi Data</p>
-                </div>
-                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2 shadow-sm shrink-0">
-                  <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                  <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Pemberitahuan RLS</span>
-                </div>
-              </div>
 
-              <div className="bg-slate-50 border border-slate-200 p-6 rounded-3xl mb-8">
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight mb-2 flex items-center gap-2 text-indigo-600">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m0-6h.01M12 3a9 9 0 110 18 9 9 0 010-18z" />
-                  </svg>
-                  Mengapa Muncul Peringatan Keamanan?
-                </h3>
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                  Supabase mendeteksi bahwa tabel <strong>students</strong>, <strong>sessions</strong>, dan <strong>rooms</strong> berada di skema publik dan dapat diakses/dimodifikasi oleh siapa saja jika memiliki URL project Anda karena Row-Level Security (RLS) belum diaktifkan. 
-                  <br /><br />
-                  Untuk mengamankan database namun tetap memastikan aplikasi ujian berjalan lancar, Anda harus mengaktifkan RLS dan membuat kebijakan (policy) akses publik/anonim agar aplikasi web tetap diizinkan melakukan operasi baca/tulis data ujian secara sah.
-                </p>
-              </div>
-
-              <div className="space-y-6">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">Langkah Mudah Penyelesaian:</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="p-5 bg-slate-50 border border-slate-150 rounded-2xl">
-                    <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs mb-3">1</div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">Salin Query</p>
-                    <p className="text-[11px] text-slate-600 font-semibold leading-normal">Klik tombol "Salin Script SQL" di bawah untuk menyalin seluruh perintah konfigurasi keamanan.</p>
-                  </div>
-
-                  <div className="p-5 bg-slate-50 border border-slate-150 rounded-2xl">
-                    <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs mb-3">2</div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">SQL Editor</p>
-                    <p className="text-[11px] text-slate-600 font-semibold leading-normal">Buka dashboard proyek Anda di <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline font-black">Supabase</a>, lalu masuk ke menu <strong>SQL Editor</strong>.</p>
-                  </div>
-
-                  <div className="p-5 bg-slate-50 border border-slate-150 rounded-2xl">
-                    <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs mb-3">3</div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">Tempel & Run</p>
-                    <p className="text-[11px] text-slate-600 font-semibold leading-normal">Buat query baru, tempel (paste) script SQL keamanan yang sudah disalin, lalu klik tombol <strong>Run</strong>.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-slate-900 rounded-[2.5rem] p-8 md:p-10 text-white shadow-xl relative overflow-hidden border border-slate-800">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 relative z-10">
-                <div>
-                  <h3 className="text-lg font-black uppercase tracking-tight leading-none mb-1 text-white">Script SQL Row-Level Security</h3>
-                  <p className="text-slate-400 font-bold text-[9px] uppercase tracking-widest">Query Lengkap untuk Tabel Students, Sessions, & Rooms</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const sqlText = `ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;\nALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;\nALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;\n\nDROP POLICY IF EXISTS "Allow public read students" ON public.students;\nDROP POLICY IF EXISTS "Allow public insert students" ON public.students;\nDROP POLICY IF EXISTS "Allow public update students" ON public.students;\nDROP POLICY IF EXISTS "Allow public delete students" ON public.students;\n\nDROP POLICY IF EXISTS "Allow public read sessions" ON public.sessions;\nDROP POLICY IF EXISTS "Allow public insert sessions" ON public.sessions;\nDROP POLICY IF EXISTS "Allow public update sessions" ON public.sessions;\nDROP POLICY IF EXISTS "Allow public delete sessions" ON public.sessions;\n\nDROP POLICY IF EXISTS "Allow public read rooms" ON public.rooms;\nDROP POLICY IF EXISTS "Allow public insert rooms" ON public.rooms;\nDROP POLICY IF EXISTS "Allow public update rooms" ON public.rooms;\nDROP POLICY IF EXISTS "Allow public delete rooms" ON public.rooms;\n\nCREATE POLICY "Allow public read students" ON public.students FOR SELECT TO anon USING (true);\nCREATE POLICY "Allow public insert students" ON public.students FOR INSERT TO anon WITH CHECK (true);\nCREATE POLICY "Allow public update students" ON public.students FOR UPDATE TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "Allow public delete students" ON public.students FOR DELETE TO anon USING (true);\n\nCREATE POLICY "Allow public read sessions" ON public.sessions FOR SELECT TO anon USING (true);\nCREATE POLICY "Allow public insert sessions" ON public.sessions FOR INSERT TO anon WITH CHECK (true);\nCREATE POLICY "Allow public update sessions" ON public.sessions FOR UPDATE TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "Allow public delete sessions" ON public.sessions FOR DELETE TO anon USING (true);\n\nCREATE POLICY "Allow public read rooms" ON public.rooms FOR SELECT TO anon USING (true);\nCREATE POLICY "Allow public insert rooms" ON public.rooms FOR INSERT TO anon WITH CHECK (true);\nCREATE POLICY "Allow public update rooms" ON public.rooms FOR UPDATE TO anon USING (true) WITH CHECK (true);\nCREATE POLICY "Allow public delete rooms" ON public.rooms FOR DELETE TO anon USING (true);\n\nDO $$\nBEGIN\n    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='students' AND column_name='password') THEN\n        ALTER TABLE public.students RENAME COLUMN password TO passkey;\n    END IF;\n    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='rooms' AND column_name='password') THEN\n        ALTER TABLE public.rooms RENAME COLUMN password TO passkey;\n    END IF;\nEND $$;`;
-                    navigator.clipboard.writeText(sqlText);
-                    setIsCopied(true);
-                    setTimeout(() => setIsCopied(false), 3000);
-                  }}
-                  className={`px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center gap-2 cursor-pointer ${
-                    isCopied ? 'bg-emerald-600 text-white' : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                  }`}
-                >
-                  {isCopied ? (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Berhasil Disalin!
-                    </>
-                  ) : (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                      </svg>
-                      Salin Script SQL
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 font-mono text-[11px] leading-relaxed text-indigo-300 max-h-60 overflow-y-auto custom-scrollbar relative">
-                <p className="text-slate-500 font-sans font-bold text-[9px] uppercase tracking-widest mb-4">--- SCRIPT MULAI ---</p>
-                <span className="text-slate-400">-- 1. Mengaktifkan Row Level Security (RLS) pada semua tabel</span><br />
-                <span className="text-emerald-400">ALTER TABLE</span> public.students <span className="text-emerald-400">ENABLE ROW LEVEL SECURITY</span>;<br />
-                <span className="text-emerald-400">ALTER TABLE</span> public.sessions <span className="text-emerald-400">ENABLE ROW LEVEL SECURITY</span>;<br />
-                <span className="text-emerald-400">ALTER TABLE</span> public.rooms <span className="text-emerald-400">ENABLE ROW LEVEL SECURITY</span>;<br /><br />
-
-                <span className="text-slate-400">-- 2. Menghapus Policy lama jika ada (untuk mencegah konflik)</span><br />
-                <span className="text-rose-400">DROP POLICY IF EXISTS</span> "Allow public read students" <span className="text-emerald-400">ON</span> public.students;<br />
-                <span className="text-rose-400">DROP POLICY IF EXISTS</span> "Allow public insert students" <span className="text-emerald-400">ON</span> public.students;<br />
-                <span className="text-rose-400">DROP POLICY IF EXISTS</span> "Allow public update students" <span className="text-emerald-400">ON</span> public.students;<br />
-                <span className="text-rose-400">DROP POLICY IF EXISTS</span> "Allow public delete students" <span className="text-emerald-400">ON</span> public.students;<br /><br />
-
-                <span className="text-slate-400">-- 3. Membuat Policy baru untuk akses anonim agar aplikasi web tetap berjalan</span><br />
-                <span className="text-emerald-400">CREATE POLICY</span> "Allow public read students" <span className="text-emerald-400">ON</span> public.students <span className="text-emerald-400">FOR SELECT TO</span> anon <span className="text-emerald-400">USING</span> (true);<br />
-                <span className="text-emerald-400">CREATE POLICY</span> "Allow public insert students" <span className="text-emerald-400">ON</span> public.students <span className="text-emerald-400">FOR INSERT TO</span> anon <span className="text-emerald-400">WITH CHECK</span> (true);<br />
-                <span className="text-emerald-400">CREATE POLICY</span> "Allow public update students" <span className="text-emerald-400">ON</span> public.students <span className="text-emerald-400">FOR UPDATE TO</span> anon <span className="text-emerald-400">USING</span> (true) <span className="text-emerald-400">WITH CHECK</span> (true);<br />
-                <span className="text-emerald-400">CREATE POLICY</span> "Allow public delete students" <span className="text-emerald-400">ON</span> public.students <span className="text-emerald-400">FOR DELETE TO</span> anon <span className="text-emerald-400">USING</span> (true);<br /><br />
-
-                <span className="text-slate-500 font-sans font-bold text-[9px] uppercase tracking-widest mt-4">... (dan seterusnya untuk tabel sessions & rooms) ...</span>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
 
       {/* MODAL VIEW STUDENTS IN ROOM */}
@@ -1369,7 +1257,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* MOBILE BOTTOM NAVIGATION BAR */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/80 md:hidden z-[150] px-4 py-2 pb-safe flex justify-around items-center shadow-[0_-8px_30px_rgb(0,0,0,0.06)] animate-in slide-in-from-bottom duration-300">
-        {(['SESSIONS', 'STUDENTS', 'ROOMS', 'SECURITY'] as const).map(tab => {
+        {(['SESSIONS', 'STUDENTS', 'ROOMS'] as const).map(tab => {
           const isActive = activeTab === tab;
           let label = '';
           let icon = null;
@@ -1388,18 +1276,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             );
-          } else if (tab === 'ROOMS') {
+          } else {
             label = 'Ruang';
             icon = (
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={isActive ? 2.5 : 2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            );
-          } else {
-            label = 'Keamanan';
-            icon = (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={isActive ? 2.5 : 2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             );
           }
