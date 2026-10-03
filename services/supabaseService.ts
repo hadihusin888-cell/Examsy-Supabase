@@ -463,8 +463,23 @@ globalRealtimeChannel.subscribe();
 
 export const broadcastStudentUpdate = (student: Partial<Student> & { nis: string | number }) => {
   try {
-    const norm = normalizeStudent(student);
-    // 1. Broadcast via Supabase WebSocket (0 Postgres DB Reads!)
+    const cleanNis = String(student.nis);
+    let fullStudent: any = student;
+    if (!student.name || !student.class || !student.roomId) {
+      try {
+        const raw = localStorage.getItem("examsy_cache_students");
+        if (raw) {
+          const cached = JSON.parse(raw) as Student[];
+          const existing = cached.find(s => String(s.nis) === cleanNis);
+          if (existing) {
+            fullStudent = { ...existing, ...student };
+          }
+        }
+      } catch (_) {}
+    }
+    const norm = normalizeStudent(fullStudent);
+
+    // 1. Broadcast via Supabase WebSocket (0 Postgres DB Reads, 0 Postgres DB Writes!)
     globalRealtimeChannel.send({
       type: 'broadcast',
       event: 'STUDENT_UPDATE',
@@ -574,26 +589,61 @@ export const subscribeStudent = (nis: string, callback: (student: Student | null
 
 export const subscribeAllStudents = (callback: (event: string, student: Student, oldNis?: string) => void) => {
   try {
-    if (checkIsOfflineFallbackActive()) return () => {};
+    let pgChannel: any = null;
+    if (!checkIsOfflineFallbackActive()) {
+      try {
+        pgChannel = supabase
+          .channel('all-students-updates')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'students' },
+            (payload) => {
+              if (payload.eventType === 'DELETE' && payload.old) {
+                callback('DELETE', normalizeStudent(payload.old), String(payload.old.nis));
+              } else if (payload.new) {
+                const norm = normalizeStudent(payload.new);
+                callback(payload.eventType, norm);
+              }
+            }
+          )
+          .subscribe();
+      } catch (err) {
+        console.warn("Postgres changes sub error:", err);
+      }
+    }
 
-    const channel = supabase
-      .channel('all-students-updates')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'students' },
-        (payload) => {
-          if (payload.eventType === 'DELETE' && payload.old) {
-            callback('DELETE', normalizeStudent(payload.old), String(payload.old.nis));
-          } else if (payload.new) {
-            const norm = normalizeStudent(payload.new);
-            callback(payload.eventType, norm);
-          }
+    // 2. Listen to Supabase Realtime Broadcast Channel (0 DB reads, instant push to Proctors & Admins)
+    globalRealtimeChannel.on(
+      'broadcast',
+      { event: 'STUDENT_UPDATE' },
+      (payload) => {
+        if (payload.payload) {
+          const norm = normalizeStudent(payload.payload);
+          callback('UPDATE', norm);
         }
-      )
-      .subscribe();
+      }
+    );
+
+    // 3. Listen to browser BroadcastChannel API (0 network calls, multi-tab sync)
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        bc = new BroadcastChannel('examsy_bc_channel');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'STUDENT_UPDATE' && event.data.student) {
+            callback('UPDATE', normalizeStudent(event.data.student));
+          }
+        };
+      } catch (_) {}
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (pgChannel) {
+        try { supabase.removeChannel(pgChannel); } catch (_) {}
+      }
+      if (bc) {
+        try { bc.close(); } catch (_) {}
+      }
     };
   } catch (e) {
     console.warn("Realtime all students subscription error:", e);

@@ -300,6 +300,16 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
     };
   }, [hasConsented, triggerViolation, isBlocked]);
 
+  // Pastikan status siswa terdaftar sebagai SEDANG_UJIAN saat berada di ruang ujian
+  useEffect(() => {
+    if (student && student.status !== StudentStatus.SEDANG_UJIAN && student.status !== StudentStatus.BLOKIR && student.status !== StudentStatus.SELESAI) {
+      onAction('UPDATE_STUDENT', {
+        ...student,
+        status: StudentStatus.SEDANG_UJIAN
+      });
+    }
+  }, []);
+
   const startPersistence = async () => {
     try {
       const elem = document.documentElement;
@@ -313,6 +323,11 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
     } finally {
       await requestWakeLock();
       setHasConsented(true);
+      // Update status siswa ke SEDANG_UJIAN saat tombol Mulai Ujian diklik
+      onAction('UPDATE_STUDENT', {
+        ...student,
+        status: StudentStatus.SEDANG_UJIAN
+      });
     }
   };
 

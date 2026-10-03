@@ -157,9 +157,14 @@ const App: React.FC = () => {
                   localStorage.removeItem('examsy_auth');
                   setView('STUDENT_LOGIN');
                 } else {
-                  setCurrentUser(student);
+                  const studentWithActiveStatus: Student = {
+                    ...student,
+                    status: StudentStatus.SEDANG_UJIAN
+                  };
+                  setCurrentUser(studentWithActiveStatus);
                   setCurrentSession(session);
                   setView('EXAM_ROOM');
+                  handleAction('UPDATE_STUDENT', studentWithActiveStatus);
                 }
               } else {
                 localStorage.removeItem('examsy_auth');
@@ -340,19 +345,18 @@ const App: React.FC = () => {
     // Gunakan latest data dari state jika mungkin
     const latestStudent = students.find(s => String(s.nis) === String(student.nis)) || student;
 
-    const success = await handleAction('UPDATE_STUDENT', { 
+    const studentWithActiveStatus: Student = { 
       ...latestStudent, 
       status: StudentStatus.SEDANG_UJIAN 
-    });
-    
-    if (success) {
-      setCurrentUser(latestStudent);
-      setCurrentSession(session);
-      setView('EXAM_ROOM');
-    } else {
-      localStorage.removeItem('examsy_auth'); // Reset jika gagal
-      alert("Gagal memproses login. Silakan cek koneksi Anda.");
-    }
+    };
+
+    // Langsung set view dan user agar proses login instan tanpa delay
+    setCurrentUser(studentWithActiveStatus);
+    setCurrentSession(session);
+    setView('EXAM_ROOM');
+
+    // Kirim update ke DB & real-time broadcast secara asinkron
+    await handleAction('UPDATE_STUDENT', studentWithActiveStatus);
     setIsProcessing(false);
   };
 

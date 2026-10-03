@@ -19,6 +19,18 @@ const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [pendingStatus, setPendingStatus] = useState<StudentStatus | null>(null);
 
+  // Sinkronkan data saat proktor membuka dashboard atau kembali ke tab tanpa polling berulang (hemat kuota)
+  React.useEffect(() => {
+    if (onRefresh) onRefresh();
+    const handleVis = () => {
+      if (document.visibilityState === 'visible' && onRefresh) {
+        onRefresh();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVis);
+    return () => document.removeEventListener('visibilitychange', handleVis);
+  }, []);
+
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
       const isInRoom = String(s.roomId || '').trim() === String(room.id).trim();
