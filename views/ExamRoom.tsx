@@ -23,7 +23,9 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
   const [isZoomVisible, setIsZoomVisible] = useState(true);
   const zoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isMobileLandscape, setIsMobileLandscape] = useState(false);
+  const [showIosGuide, setShowIosGuide] = useState(false);
 
+  const [isWakeLockActive, setIsWakeLockActive] = useState(false);
   const wakeLockRef = useRef<any>(null);
   const videoWakeLockRef = useRef<HTMLVideoElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -97,29 +99,101 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
   };
 
   const requestWakeLock = useCallback(async () => {
-    try {
-      if ('wakeLock' in navigator) {
-        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+    let success = false;
+    // 1. Native Screen Wake Lock API (Chrome Android, Desktop, Safari 16.4+)
+    if (typeof navigator !== 'undefined' && 'wakeLock' in navigator && (navigator as any).wakeLock) {
+      try {
+        if (!wakeLockRef.current || wakeLockRef.current.released) {
+          const sentinel = await (navigator as any).wakeLock.request('screen');
+          wakeLockRef.current = sentinel;
+          setIsWakeLockActive(true);
+          success = true;
+          sentinel.addEventListener('release', () => {
+            wakeLockRef.current = null;
+            setIsWakeLockActive(false);
+          });
+        } else {
+          setIsWakeLockActive(true);
+          success = true;
+        }
+      } catch (err: any) {
+        console.warn("Screen Wake Lock API error:", err);
       }
-      if (videoWakeLockRef.current) {
-        videoWakeLockRef.current.play().catch(() => {});
-      }
-    } catch (err) {
-      console.warn("Wake Lock Error:", err);
     }
+
+    // 2. Fallback keep-alive video (iOS Safari / WebViews tanpa native wakeLock)
+    if (videoWakeLockRef.current) {
+      try {
+        if (videoWakeLockRef.current.paused) {
+          const playPromise = videoWakeLockRef.current.play();
+          if (playPromise !== undefined) {
+            await playPromise;
+          }
+        }
+        setIsWakeLockActive(true);
+        success = true;
+      } catch (err) {
+        // Autoplay may need user gesture
+      }
+    }
+
+    return success;
   }, []);
 
   const releaseWakeLock = useCallback(() => {
-    if (wakeLockRef.current) {
-      wakeLockRef.current.release();
-      wakeLockRef.current = null;
-    }
-    if (videoWakeLockRef.current) {
-      videoWakeLockRef.current.pause();
-      videoWakeLockRef.current.src = "";
-      videoWakeLockRef.current.load();
-    }
+    try {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
+    } catch (_) {}
+    try {
+      if (videoWakeLockRef.current) {
+        videoWakeLockRef.current.pause();
+      }
+    } catch (_) {}
+    setIsWakeLockActive(false);
   }, []);
+
+  // Otomatis aktifkan standby on begitu siswa memasuki halaman ujian
+  useEffect(() => {
+    // Aktifkan langsung saat komponen ujian di-mount
+    requestWakeLock();
+
+    // Re-acquire wake lock jika halaman kembali menjadi visible
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !isBlocked) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Cadangan: aktifkan saat interaksi pertama jika OS memerlukan user gesture
+    const handleUserInteraction = () => {
+      if (!wakeLockRef.current) {
+        requestWakeLock();
+      }
+    };
+    window.addEventListener('click', handleUserInteraction, { passive: true });
+    window.addEventListener('touchstart', handleUserInteraction, { passive: true });
+    window.addEventListener('pointerdown', handleUserInteraction, { passive: true });
+
+    // Heartbeat check untuk memastikan layar tetap standby on selama ujian
+    const heartbeatTimer = setInterval(() => {
+      if (document.visibilityState === 'visible' && !isBlocked && !wakeLockRef.current) {
+        requestWakeLock();
+      }
+    }, 10000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('click', handleUserInteraction);
+      window.removeEventListener('touchstart', handleUserInteraction);
+      window.removeEventListener('pointerdown', handleUserInteraction);
+      clearInterval(heartbeatTimer);
+      releaseWakeLock();
+    };
+  }, [requestWakeLock, releaseWakeLock, isBlocked]);
 
   const handleFinalFinish = () => {
     releaseWakeLock();
@@ -164,6 +238,7 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
     };
   }, [triggerViolation]);
 
+  // Fullscreen change effect
   useEffect(() => {
     const handleFsChange = () => {
       const isFs = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
@@ -178,17 +253,23 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
     document.addEventListener('fullscreenchange', handleFsChange);
     document.addEventListener('webkitfullscreenchange', handleFsChange);
     
-    const timer = setInterval(() => {
-      if (hasConsented && timeLeft > 0 && !isBlocked) setTimeLeft(prev => prev - 1);
-    }, 1000);
-
     return () => {
       document.removeEventListener('fullscreenchange', handleFsChange);
       document.removeEventListener('webkitfullscreenchange', handleFsChange);
-      clearInterval(timer);
-      releaseWakeLock();
     };
-  }, [hasConsented, timeLeft, releaseWakeLock, isBlocked, triggerViolation]);
+  }, [hasConsented, isBlocked, triggerViolation]);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (!hasConsented || isBlocked) return;
+    const timer = setInterval(() => {
+      setTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [hasConsented, isBlocked]);
 
   useEffect(() => {
     if (!hasConsented || isBlocked) return;
@@ -227,10 +308,11 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
       } else if ((elem as any).webkitRequestFullscreen) {
         await (elem as any).webkitRequestFullscreen();
       }
+    } catch (err) {
+      // Fullscreen mungkin gagal di iOS Safari, tetap lanjut
+    } finally {
       await requestWakeLock();
       setHasConsented(true);
-    } catch (err) {
-      setHasConsented(true); // Tetap lanjut meskipun fullscreen gagal (khusus iPhone)
     }
   };
 
@@ -267,8 +349,19 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
 
       <video 
         ref={videoWakeLockRef} 
-        className="hidden" 
-        muted playsInline loop 
+        style={{
+          position: 'fixed',
+          top: '-999px',
+          left: '-999px',
+          width: '1px',
+          height: '1px',
+          opacity: 0.001,
+          pointerEvents: 'none'
+        }}
+        muted 
+        playsInline 
+        loop 
+        autoPlay
         src="data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZptb292AAAAbG12aGQAAAAA3u7XdN7u13QAAAPoAAAAKAABAAABAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAGWlvZHMAAAAAEAAfQEAAAP8fAgACAAAAAAAFdHJhawAAAFx0a2hkAAAAAd7u13Te7u13AAAABQAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAp1ZHRhAAAAImNoYXAAAAAaAAAAAEIARQBJAE4ARwAgAFMARQBYAFkAAAAAeW1kYXQAAAAI"
       />
 
@@ -304,12 +397,106 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-4 uppercase tracking-tight leading-none">Konfirmasi Ujian</h2>
-            <p className="text-slate-500 text-xs leading-relaxed mb-8 font-medium">
-              Sistem akan mengaktifkan <span className="text-indigo-600 font-bold">Mode Proteksi Layar</span>. Dilarang keras <span className="text-red-600 font-bold">menurunkan panel notifikasi/pengaturan</span> atau berpindah aplikasi selama ujian berlangsung.
+            <h2 className="text-2xl font-black text-slate-900 mb-3 uppercase tracking-tight leading-none">Konfirmasi Ujian</h2>
+            <p className="text-slate-500 text-xs leading-relaxed mb-4 font-medium">
+              Sistem akan mengaktifkan <span className="text-indigo-600 font-bold">Layar Otomatis Standby ON</span> (layar tidak akan mati/tidur) & <span className="text-indigo-600 font-bold">Mode Proteksi Layar</span>. Dilarang keras <span className="text-red-600 font-bold">menurunkan panel notifikasi/pengaturan</span> atau berpindah aplikasi selama ujian berlangsung.
             </p>
+
+            {(isIPhone || isIPad) && (
+              <div className="mb-5 p-3 bg-amber-50 rounded-xl border border-amber-200 text-left">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-black text-amber-800 uppercase flex items-center gap-1">
+                    🍏 Panduan Keamanan iOS
+                  </span>
+                  <button 
+                    type="button"
+                    onClick={() => setShowIosGuide(true)}
+                    className="text-[9px] font-black text-indigo-600 underline hover:text-indigo-800 cursor-pointer"
+                  >
+                    Cara Kunci Layar (Akses Terpandu)
+                  </button>
+                </div>
+                <p className="text-[10px] text-amber-700 leading-snug">
+                  Gunakan fitur bawaan Apple <strong>Akses Terpandu (Guided Access)</strong> dengan menekan tombol Power 3x agar aplikasi terkunci penuh dan notifikasi mati.
+                </p>
+              </div>
+            )}
+
             <button onClick={startPersistence} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl font-black text-xs md:text-sm uppercase tracking-widest transition-all active:scale-95 cursor-pointer">
               Mulai Ujian Sekarang
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PANDUAN AKSES TERPANDU IOS */}
+      {showIosGuide && (
+        <div className="fixed inset-0 z-[2000] bg-slate-950/90 flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-white w-full max-w-[420px] p-6 md:p-8 rounded-2xl text-left shadow-2xl border-t-8 border-amber-500 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🔒</span>
+                <h3 className="text-sm md:text-base font-black text-slate-900 uppercase tracking-tight">Kunci Layar iOS (Akses Terpandu)</h3>
+              </div>
+              <button 
+                onClick={() => setShowIosGuide(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+              Apple menyediakan fitur bawaan resmi bernama <strong>Akses Terpandu (Guided Access)</strong> untuk mengunci iPhone/iPad ke 1 aplikasi saja sehingga siswa tidak bisa membuka aplikasi lain atau melihat notifikasi.
+            </p>
+
+            <div className="space-y-3 mb-6">
+              <div className="flex gap-2.5 items-start bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-[10px] shrink-0 mt-0.5">1</span>
+                <div>
+                  <h4 className="text-[11px] font-black text-slate-900 uppercase">Aktifkan Sekali di Pengaturan</h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                    Buka <strong>Pengaturan &gt; Aksesibilitas &gt; Akses Terpandu (Guided Access)</strong>, lalu nyalakan toggle dan atur Kode Sandi.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 items-start bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-[10px] shrink-0 mt-0.5">2</span>
+                <div>
+                  <h4 className="text-[11px] font-black text-slate-900 uppercase">Kunci Saat Mulai Ujian</h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                    Buka halaman ujian ini, lalu <strong>tekan tombol samping / Power 3 kali</strong> cepat, lalu ketuk <strong>Mulai</strong> di pojok kanan atas.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 items-start bg-emerald-50 p-3 rounded-xl border border-emerald-200/80">
+                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-[10px] shrink-0 mt-0.5">3</span>
+                <div>
+                  <h4 className="text-[11px] font-black text-emerald-900 uppercase">100% Aman & Standby On</h4>
+                  <p className="text-[10px] text-emerald-700 mt-0.5 leading-snug">
+                    Gestur keluar, panel notifikasi, dan tombol Home otomatis MATI TOTAL. Layar dijamin tetap menyala sampai ujian selesai.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 items-start bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                <span className="w-5 h-5 rounded-full bg-slate-600 text-white flex items-center justify-center font-black text-[10px] shrink-0 mt-0.5">4</span>
+                <div>
+                  <h4 className="text-[11px] font-black text-slate-900 uppercase">Selesai Ujian</h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                    Setelah selesai ujian, tekan tombol samping 3 kali dan masukkan kode sandi untuk keluar.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setShowIosGuide(false)}
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-black text-xs uppercase tracking-wider transition-all"
+            >
+              Mengerti & Kembali
             </button>
           </div>
         </div>
@@ -324,6 +511,21 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
           <h1 className="text-white font-black uppercase tracking-tighter truncate text-xs md:text-lg">{session.name}</h1>
         </div>
         <div className={`flex-1 flex items-center justify-end transition-all ${isMobileLandscape ? 'gap-2' : 'gap-3 md:gap-4'}`}>
+          {/* Standby On Indicator */}
+          <div 
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-full border transition-all ${
+              isWakeLockActive 
+                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' 
+                : 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+            } ${isMobileLandscape ? 'text-[7px] py-0.5 px-1.5' : 'text-[8px] md:text-[10px]'}`}
+            title={isWakeLockActive ? "Layar otomatis Standby ON (tidak akan redup / mati)" : "Mengaktifkan layar standby..."}
+          >
+            <span className={`rounded-full shrink-0 ${isMobileLandscape ? 'w-1 h-1' : 'w-1.5 h-1.5'} ${isWakeLockActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'}`}></span>
+            <span className={`font-black tracking-wider uppercase ${isMobileLandscape ? 'text-[6px]' : ''}`}>
+              {isWakeLockActive ? 'Standby On' : 'Standby...'}
+            </span>
+          </div>
+
           <button 
             onClick={() => setIframeKey(prev => prev + 1)} 
             className={`text-indigo-400 hover:text-white transition-colors ${isMobileLandscape ? 'p-1' : 'p-2'}`}
