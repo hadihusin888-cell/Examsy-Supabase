@@ -103,12 +103,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     const tableRows = sortedStudents.map((s, idx) => `
       <tr style="border-bottom: 1px solid #cbd5e1; ${idx % 2 === 1 ? 'background-color: #f8fafc;' : ''}">
-        <td style="padding: 8px 10px; text-align: center; font-size: 11px; font-weight: bold; color: #475569;">${idx + 1}</td>
-        <td style="padding: 8px 10px; font-size: 11px; font-weight: 700; color: #0f172a; font-family: monospace;">${s.nis || '-'}</td>
-        <td style="padding: 8px 10px; font-size: 11px; font-weight: 600; color: #0f172a; text-transform: uppercase;">${s.name || '-'}</td>
-        <td style="padding: 8px 10px; text-align: center; font-size: 11px; font-weight: 700; color: #334155;">${s.class || '-'}</td>
-        <td style="padding: 8px 10px; font-size: 11px; font-family: monospace; font-weight: 700; color: #4338ca; text-align: center; background: #eef2ff;">${s.password || '-'}</td>
-        <td style="padding: 8px 10px; text-align: center; color: #cbd5e1; font-size: 10px;">........................</td>
+        <td style="padding: 9px 12px; text-align: center; font-size: 11px; font-weight: bold; color: #475569;">${idx + 1}</td>
+        <td style="padding: 9px 12px; font-size: 12px; font-weight: 700; color: #0f172a; font-family: monospace;">${s.nis || '-'}</td>
+        <td style="padding: 9px 12px; font-size: 12px; font-weight: 600; color: #0f172a; text-transform: uppercase;">${s.name || '-'}</td>
+        <td style="padding: 9px 12px; text-align: center; font-size: 12px; font-weight: 700; color: #334155;">${s.class || '-'}</td>
+        <td style="padding: 9px 12px; font-size: 12px; font-family: monospace; font-weight: 700; color: #4338ca; text-align: center; background: #eef2ff;">${s.password || '-'}</td>
       </tr>
     `).join('');
 
@@ -240,12 +239,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <table>
           <thead>
             <tr>
-              <th style="width: 35px; text-align: center;">No.</th>
-              <th style="width: 110px; text-align: left;">No Induk (NIS)</th>
+              <th style="width: 40px; text-align: center;">No.</th>
+              <th style="width: 130px; text-align: left;">No Induk (NIS)</th>
               <th style="text-align: left;">Nama Lengkap Siswa</th>
-              <th style="width: 70px; text-align: center;">Kelas</th>
-              <th style="width: 110px; text-align: center;">Password</th>
-              <th style="width: 120px; text-align: center;">Paraf Siswa</th>
+              <th style="width: 80px; text-align: center;">Kelas</th>
+              <th style="width: 140px; text-align: center;">Password</th>
             </tr>
           </thead>
           <tbody>
