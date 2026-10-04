@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Student, StudentStatus, Room } from '../types';
+import { APP_LOGO_URL, APP_LOGO_FALLBACK } from '../constants';
 
 interface ProctorDashboardProps {
   gasUrl: string;
@@ -77,10 +78,17 @@ const ProctorDashboard: React.FC<ProctorDashboardProps> = ({
       {/* HEADER - RESPONSIVE */}
       <header className="bg-white border-b border-slate-200/85 px-4 md:px-10 py-4 md:py-5 flex items-center justify-between shrink-0 z-50 shadow-sm">
         <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
-           <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black shrink-0 text-sm md:text-base italic shadow-lg shadow-indigo-100">P</div>
+           <div className="h-9 md:h-10 px-2 bg-white rounded-xl flex items-center justify-center border border-slate-200/80 shadow-sm shrink-0 overflow-hidden">
+             <img 
+               src={APP_LOGO_URL} 
+               alt="Logo Al-Irsyad" 
+               className="h-6 md:h-7 w-auto object-contain"
+               onError={(e) => { (e.target as HTMLImageElement).src = APP_LOGO_FALLBACK; }}
+             />
+           </div>
            <div className="overflow-hidden">
               <h1 className="text-slate-900 font-black uppercase tracking-tight text-xs md:text-sm truncate">{(room && room.name) || 'RUANG'}</h1>
-              <p className="text-slate-400 text-[8px] md:text-[9px] font-black uppercase tracking-widest opacity-80">Proktor Ruang</p>
+              <p className="text-slate-400 text-[8px] md:text-[9px] font-black uppercase tracking-widest opacity-80">Proktor Ruang &bull; SMP Al Irsyad</p>
            </div>
         </div>
         <div className="flex items-center gap-2 md:gap-6 shrink-0">

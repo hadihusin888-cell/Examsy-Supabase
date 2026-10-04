@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { ExamSession, Student, StudentStatus, Room, Question } from '../types';
+import { APP_LOGO_URL, APP_LOGO_FALLBACK } from '../constants';
 
 const formatDate = (dateStr: string) => {
   if (!dateStr || dateStr === 'TIDAK_ADA_TANGGAL') return 'Tanpa Tanggal';
@@ -58,6 +59,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [roomToEdit, setRoomToEdit] = useState<Room | null>(null);
   const [roomToDelete, setRoomToDelete] = useState<Room | null>(null);
   const [roomToViewStudents, setRoomToViewStudents] = useState<Room | null>(null);
+  const [roomStudentSearch, setRoomStudentSearch] = useState('');
+  const [roomStudentViewMode, setRoomStudentViewMode] = useState<'TABLE' | 'GRID'>('TABLE');
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -83,6 +86,210 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       sanitized = `${sanitized}${separator}rm=minimal`;
     }
     return sanitized;
+  };
+
+  const handlePrintRoomStudents = (targetRoom: Room, roomStudents: Student[]) => {
+    if (!roomStudents || roomStudents.length === 0) return;
+
+    const sortedStudents = [...roomStudents].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const currentDate = new Intl.DateTimeFormat('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date());
+
+    const tableRows = sortedStudents.map((s, idx) => `
+      <tr style="border-bottom: 1px solid #cbd5e1; ${idx % 2 === 1 ? 'background-color: #f8fafc;' : ''}">
+        <td style="padding: 8px 10px; text-align: center; font-size: 11px; font-weight: bold; color: #475569;">${idx + 1}</td>
+        <td style="padding: 8px 10px; font-size: 11px; font-weight: 700; color: #0f172a; font-family: monospace;">${s.nis || '-'}</td>
+        <td style="padding: 8px 10px; font-size: 11px; font-weight: 600; color: #0f172a; text-transform: uppercase;">${s.name || '-'}</td>
+        <td style="padding: 8px 10px; text-align: center; font-size: 11px; font-weight: 700; color: #334155;">${s.class || '-'}</td>
+        <td style="padding: 8px 10px; font-size: 11px; font-family: monospace; font-weight: 700; color: #4338ca; text-align: center; background: #eef2ff;">${s.password || '-'}</td>
+        <td style="padding: 8px 10px; text-align: center; color: #cbd5e1; font-size: 10px;">........................</td>
+      </tr>
+    `).join('');
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Daftar Peserta - ${targetRoom.name}</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 12mm 10mm 12mm 10mm;
+          }
+          * { box-sizing: border-box; }
+          body {
+            font-family: Arial, Helvetica, sans-serif;
+            margin: 0;
+            padding: 10px;
+            color: #0f172a;
+            background: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .header {
+            display: flex;
+            align-items: center;
+            border-bottom: 2.5px solid #0f172a;
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+          }
+          .logo {
+            width: 75px;
+            height: auto;
+            max-height: 55px;
+            object-fit: contain;
+            margin-right: 16px;
+          }
+          .header-text {
+            flex: 1;
+          }
+          .header-text h1 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #0f172a;
+          }
+          .header-text h2 {
+            margin: 2px 0 0 0;
+            font-size: 13px;
+            font-weight: 700;
+            color: #4338ca;
+            text-transform: uppercase;
+          }
+          .header-text p {
+            margin: 2px 0 0 0;
+            font-size: 10px;
+            color: #64748b;
+          }
+          .meta-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 8px 14px;
+            border-radius: 6px;
+            margin-bottom: 14px;
+            font-size: 11px;
+            font-weight: 600;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          th {
+            background-color: #1e293b !important;
+            color: #ffffff !important;
+            padding: 8px 10px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: 1px solid #1e293b;
+          }
+          td {
+            border: 1px solid #cbd5e1;
+          }
+          .signature-section {
+            margin-top: 20px;
+            display: flex;
+            justify-content: flex-end;
+            page-break-inside: avoid;
+          }
+          .signature-box {
+            text-align: center;
+            width: 220px;
+            font-size: 11px;
+          }
+          .signature-line {
+            margin-top: 50px;
+            border-bottom: 1px solid #0f172a;
+            font-weight: bold;
+          }
+          @media print {
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <img src="${APP_LOGO_URL}" class="logo" alt="Logo" onerror="this.src='${APP_LOGO_FALLBACK}'" />
+          <div class="header-text">
+            <h1>SMP AL IRSYAD SURAKARTA</h1>
+            <h2>Daftar Peserta & Kredensial Login Siswa</h2>
+            <p>Sistem Ujian Semi-Online Resmi &bull; SMP Al Irsyad Surakarta</p>
+          </div>
+        </div>
+
+        <div class="meta-box">
+          <div><strong>Ruang:</strong> ${targetRoom.name}</div>
+          <div><strong>Total Peserta:</strong> ${sortedStudents.length} Siswa</div>
+          <div><strong>Waktu Cetak:</strong> ${currentDate}</div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35px; text-align: center;">No.</th>
+              <th style="width: 110px; text-align: left;">No Induk (NIS)</th>
+              <th style="text-align: left;">Nama Lengkap Siswa</th>
+              <th style="width: 70px; text-align: center;">Kelas</th>
+              <th style="width: 110px; text-align: center;">Password</th>
+              <th style="width: 120px; text-align: center;">Paraf Siswa</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+
+        <div class="signature-section">
+          <div class="signature-box">
+            <p style="margin: 0;">Surakarta, ....................................</p>
+            <p style="margin: 4px 0 0 0; font-weight: bold;">Proktor / Pengawas Ruang</p>
+            <div class="signature-line"></div>
+            <p style="margin: 4px 0 0 0; font-size: 10px; color: #64748b;">NIP / Nama Terang</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const printIframe = document.createElement('iframe');
+    printIframe.style.position = 'fixed';
+    printIframe.style.right = '0';
+    printIframe.style.bottom = '0';
+    printIframe.style.width = '0';
+    printIframe.style.height = '0';
+    printIframe.style.border = '0';
+    printIframe.title = 'Print Student Data';
+    document.body.appendChild(printIframe);
+
+    const doc = printIframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(htmlContent);
+      doc.close();
+      printIframe.contentWindow?.focus();
+      setTimeout(() => {
+        printIframe.contentWindow?.print();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(printIframe);
+          } catch (e) {}
+        }, 3000);
+      }, 500);
+    }
   };
 
   // Memoized Data
@@ -342,10 +549,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-50 font-sans">
       <header className="bg-white border-b border-slate-200/85 px-4 md:px-10 py-4 md:py-5 flex items-center justify-between shrink-0 z-50 shadow-sm">
-        <div className="flex items-center gap-4 md:gap-10">
-          <div className="flex items-center gap-2">
-             <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black italic shadow-lg shadow-indigo-100 text-sm md:text-base">E</div>
-             <h1 className="text-xs md:text-base font-black text-slate-900 tracking-tight uppercase">Examsy Super Admin</h1>
+        <div className="flex items-center gap-4 md:gap-8">
+          <div className="flex items-center gap-3">
+             <div className="h-9 md:h-10 px-2 bg-white rounded-xl flex items-center justify-center border border-slate-200/80 shadow-sm shrink-0">
+               <img 
+                 src={APP_LOGO_URL} 
+                 alt="Logo Al-Irsyad" 
+                 className="h-6 md:h-7 w-auto object-contain"
+                 onError={(e) => { (e.target as HTMLImageElement).src = APP_LOGO_FALLBACK; }}
+               />
+             </div>
+             <div>
+               <h1 className="text-xs md:text-sm font-black text-slate-900 tracking-tight uppercase leading-none">Examsy Super Admin</h1>
+               <span className="text-[8px] md:text-[9px] text-slate-400 font-bold uppercase tracking-wider block mt-0.5">SMP Al Irsyad Surakarta</span>
+             </div>
           </div>
           <nav className="hidden md:flex bg-slate-100 p-1 rounded-xl border border-slate-200/50">
             {(['SESSIONS', 'STUDENTS', 'ROOMS'] as const).map(tab => (
@@ -701,15 +918,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
 
                       <div className="space-y-2 mt-auto">
-                        <button 
-                          onClick={() => setRoomToViewStudents(room)}
-                          className="w-full bg-slate-50 hover:bg-indigo-600 hover:text-white text-indigo-600 py-3 rounded-2xl font-black text-[10px] uppercase transition-all border border-indigo-50"
-                        >
-                          Daftar Peserta
-                        </button>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => {
+                              setRoomToViewStudents(room);
+                              setRoomStudentSearch('');
+                            }}
+                            className="flex-1 bg-slate-50 hover:bg-indigo-600 hover:text-white text-indigo-600 py-3 rounded-2xl font-black text-[10px] uppercase transition-all border border-indigo-50 cursor-pointer"
+                          >
+                            Daftar Peserta
+                          </button>
+                          <button 
+                            onClick={() => handlePrintRoomStudents(room, roomParticipants)}
+                            disabled={roomParticipants.length === 0}
+                            title="Cetak Data Siswa (No Induk, Nama, Kelas, Password)"
+                            className="px-3.5 bg-slate-50 hover:bg-indigo-600 hover:text-white text-indigo-600 disabled:opacity-40 py-3 rounded-2xl font-black text-[10px] transition-all border border-indigo-50 flex items-center justify-center cursor-pointer shadow-sm active:scale-95"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                          </button>
+                        </div>
                         <div className="flex justify-between items-center pt-4 border-t border-slate-50">
-                          <button onClick={() => setRoomToEdit(room)} className="text-indigo-600 font-black text-[10px] uppercase tracking-widest hover:underline">Edit Detail</button>
-                          <button onClick={() => setRoomToDelete(room)} className="text-red-400 hover:text-red-600 transition-colors">
+                          <button onClick={() => setRoomToEdit(room)} className="text-indigo-600 font-black text-[10px] uppercase tracking-widest hover:underline cursor-pointer">Edit Detail</button>
+                          <button onClick={() => setRoomToDelete(room)} className="text-red-400 hover:text-red-600 transition-colors cursor-pointer">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                           </button>
                         </div>
@@ -725,49 +957,185 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </main>
 
       {/* MODAL VIEW STUDENTS IN ROOM */}
-      {roomToViewStudents && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-2xl h-[80vh] flex flex-col rounded-[3.5rem] shadow-2xl relative animate-in zoom-in-95 overflow-hidden">
-             <header className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0">
-               <div>
-                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">{roomToViewStudents.name}</h3>
-                  <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-2">Daftar Peserta yang Ditempatkan</p>
+      {roomToViewStudents && (() => {
+        const roomStudentsList = students.filter(s => s.roomId === roomToViewStudents.id);
+        const filteredRoomStudents = roomStudentsList.filter(s => {
+          if (!roomStudentSearch.trim()) return true;
+          const q = roomStudentSearch.toLowerCase();
+          return (
+            String(s.nis || '').toLowerCase().includes(q) ||
+            String(s.name || '').toLowerCase().includes(q) ||
+            String(s.class || '').toLowerCase().includes(q) ||
+            String(s.password || '').toLowerCase().includes(q)
+          );
+        }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        return (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-3 md:p-6 animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-4xl h-[90vh] md:h-[85vh] flex flex-col rounded-3xl md:rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 overflow-hidden">
+               <header className="p-5 md:p-7 border-b border-slate-100 flex items-center justify-between shrink-0 gap-4 bg-white">
+                 <div>
+                    <h3 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">{roomToViewStudents.name}</h3>
+                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1.5">Daftar Peserta & Kredensial Siswa</p>
+                 </div>
+                 <div className="flex items-center gap-2.5">
+                   <button 
+                     onClick={() => handlePrintRoomStudents(roomToViewStudents, roomStudentsList)}
+                     disabled={roomStudentsList.length === 0}
+                     className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 md:px-5 py-2.5 md:py-3 rounded-xl font-black text-[10px] md:text-xs uppercase tracking-wider shadow-lg shadow-indigo-100 active:scale-95 transition-all cursor-pointer"
+                     title="Cetak No Induk, Nama, Kelas, dan Password"
+                   >
+                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                       <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                     </svg>
+                     <span>Cetak Data Siswa</span>
+                   </button>
+                   <button 
+                     onClick={() => { setRoomToViewStudents(null); setRoomStudentSearch(''); }} 
+                     className="p-2.5 text-slate-400 hover:text-red-500 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                   >
+                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                   </button>
+                 </div>
+               </header>
+
+               {/* SUB HEADER CONTROLS */}
+               <div className="px-5 md:px-7 py-3 bg-slate-50 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                 <div className="relative w-full sm:w-72">
+                   <input 
+                     type="text"
+                     value={roomStudentSearch}
+                     onChange={(e) => setRoomStudentSearch(e.target.value)}
+                     placeholder="Cari NIS, Nama, Kelas..."
+                     className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                   />
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                   </svg>
+                 </div>
+                 <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                   <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                     {filteredRoomStudents.length} / {roomStudentsList.length} Siswa
+                   </span>
+                   <div className="flex bg-slate-200/80 p-0.5 rounded-xl border border-slate-200">
+                     <button 
+                       onClick={() => setRoomStudentViewMode('TABLE')}
+                       className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer ${roomStudentViewMode === 'TABLE' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                     >
+                       Tabel
+                     </button>
+                     <button 
+                       onClick={() => setRoomStudentViewMode('GRID')}
+                       className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer ${roomStudentViewMode === 'GRID' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                     >
+                       Kartu
+                     </button>
+                   </div>
+                 </div>
                </div>
-               <button onClick={() => setRoomToViewStudents(null)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-               </button>
-             </header>
-             <div className="flex-1 overflow-auto p-8 custom-scrollbar">
-                {students.filter(s => s.roomId === roomToViewStudents.id).length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center">
-                    <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mb-4 text-slate-200">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                    </div>
-                    <p className="text-slate-300 font-black uppercase text-[10px] tracking-widest">Belum ada siswa di ruang ini.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {students.filter(s => s.roomId === roomToViewStudents.id).sort((a,b) => a.name.localeCompare(b.name)).map(s => (
-                      <div key={s.nis} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between group">
-                        <div className="overflow-hidden">
-                          <p className="text-[10px] font-black text-indigo-600 leading-none mb-1.5 uppercase tracking-tight">{s.nis}</p>
-                          <h4 className="text-xs font-black text-slate-800 uppercase truncate">{s.name}</h4>
-                          <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase">Pass: <span className="text-indigo-500 font-black normal-case">{s.password || '-'}</span></p>
-                        </div>
-                        <div className="shrink-0 ml-3">
-                           {getStatusBadge(s.status)}
-                        </div>
+
+               <div className="flex-1 overflow-auto p-4 md:p-7 custom-scrollbar bg-slate-50/50">
+                  {roomStudentsList.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                      <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 text-slate-300 shadow-sm border border-slate-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                       </div>
-                    ))}
+                      <p className="text-slate-400 font-black uppercase text-[11px] tracking-widest">Belum ada siswa yang ditempatkan di ruang ini.</p>
+                      <p className="text-slate-400 text-xs mt-1">Gunakan tab Siswa &gt; Pindahkan Ruang untuk menempatkan peserta.</p>
+                    </div>
+                  ) : filteredRoomStudents.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                      <p className="text-slate-400 font-bold text-xs">Tidak ada siswa yang sesuai pencarian "{roomStudentSearch}".</p>
+                      <button onClick={() => setRoomStudentSearch('')} className="mt-3 text-[10px] font-black uppercase tracking-wider text-indigo-600 hover:underline">Reset Pencarian</button>
+                    </div>
+                  ) : roomStudentViewMode === 'TABLE' ? (
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100/90 border-b border-slate-200 text-[10px] font-black text-slate-600 uppercase tracking-wider">
+                            <th className="py-3 px-4 text-center w-12">No.</th>
+                            <th className="py-3 px-4">No Induk (NIS)</th>
+                            <th className="py-3 px-4">Nama Siswa</th>
+                            <th className="py-3 px-4 text-center">Kelas</th>
+                            <th className="py-3 px-4 text-center">Password</th>
+                            <th className="py-3 px-4 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filteredRoomStudents.map((s, idx) => (
+                            <tr key={s.nis} className="hover:bg-indigo-50/30 transition-colors">
+                              <td className="py-3 px-4 text-center text-xs font-bold text-slate-400">{idx + 1}</td>
+                              <td className="py-3 px-4 text-xs font-black font-mono text-indigo-600">{s.nis}</td>
+                              <td className="py-3 px-4 text-xs font-bold text-slate-900 uppercase">{s.name}</td>
+                              <td className="py-3 px-4 text-center">
+                                <span className="inline-block px-2.5 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-md text-[10px] font-black">
+                                  {s.class || '-'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className="inline-block px-2.5 py-1 bg-slate-100 border border-slate-200/80 text-slate-800 font-mono font-black text-xs rounded-lg select-all">
+                                  {s.password || '-'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                {getStatusBadge(s.status)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {filteredRoomStudents.map((s) => (
+                        <div key={s.nis} className="p-4 bg-white border border-slate-200/90 rounded-2xl flex items-center justify-between shadow-sm hover:border-indigo-400 transition-all">
+                          <div className="overflow-hidden space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-black text-indigo-600 font-mono">{s.nis}</span>
+                              <span className="px-1.5 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded text-[9px] font-black">Kls {s.class || '-'}</span>
+                            </div>
+                            <h4 className="text-xs font-black text-slate-900 uppercase truncate">{s.name}</h4>
+                            <div className="flex items-center gap-1.5 pt-0.5">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">Password:</span>
+                              <span className="text-[11px] font-mono font-black text-indigo-600 bg-slate-100 px-2 py-0.5 rounded select-all border border-slate-200">{s.password || '-'}</span>
+                            </div>
+                          </div>
+                          <div className="shrink-0 ml-3">
+                            {getStatusBadge(s.status)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+               </div>
+
+               <footer className="p-4 md:p-6 bg-white border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider text-center sm:text-left">
+                    Ruang: <strong className="text-slate-900">{roomToViewStudents.name}</strong> &bull; Total: <strong className="text-indigo-600">{roomStudentsList.length} Siswa</strong>
                   </div>
-                )}
-             </div>
-             <footer className="p-8 bg-slate-50 border-t border-slate-100 text-center shrink-0">
-                <button onClick={() => setRoomToViewStudents(null)} className="px-10 py-4 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all">Tutup Daftar</button>
-             </footer>
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                    <button 
+                      onClick={() => handlePrintRoomStudents(roomToViewStudents, roomStudentsList)} 
+                      disabled={roomStudentsList.length === 0}
+                      className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.15em] shadow-lg shadow-indigo-100 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                      </svg>
+                      Cetak Data Siswa
+                    </button>
+                    <button 
+                      onClick={() => { setRoomToViewStudents(null); setRoomStudentSearch(''); }} 
+                      className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-[10px] uppercase tracking-[0.15em] transition-all cursor-pointer"
+                    >
+                      Tutup
+                    </button>
+                  </div>
+               </footer>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* BULK UPDATE ROOM MODAL */}
       {showBulkRoomModal && (

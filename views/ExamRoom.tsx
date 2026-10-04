@@ -89,7 +89,7 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
 
   const handleAutoScroll = (direction: 'up' | 'down') => {
     if (scrollContainerRef.current) {
-      const scrollAmount = 250;
+      const scrollAmount = Math.max(window.innerHeight * 0.45, 300);
       scrollContainerRef.current.scrollBy({
         top: direction === 'up' ? -scrollAmount : scrollAmount,
         behavior: 'smooth'
@@ -597,27 +597,35 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
            </button>
         </div>
 
-        {/* MANUAL SCROLL BUTTONS FOR MOBILE & TABLETS */}
-        {isTabletOrMobile && (
-          <div className={`absolute top-1/2 -translate-y-1/2 z-[200] flex flex-col gap-3 transition-all duration-500 ${isZoomVisible ? 'opacity-40 hover:opacity-100' : 'opacity-[0.15] hover:opacity-100'} ${isMobileLandscape ? 'scale-[0.75] right-2' : 'scale-100 right-4'}`}>
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleAutoScroll('up'); }}
-              className="w-12 h-12 flex items-center justify-center bg-black/40 backdrop-blur-xl border border-white/10 text-white rounded-2xl shadow-2xl active:scale-90 transition-all"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" />
-              </svg>
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleAutoScroll('down'); }}
-              className="w-12 h-12 flex items-center justify-center bg-black/40 backdrop-blur-xl border border-white/10 text-white rounded-2xl shadow-2xl active:scale-90 transition-all"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-          </div>
-        )}
+        {/* TOMBOL SCROLL NAIK TURUN TRANSPARAN DI KANAN LAYAR (LAPTOP, TABLET, MOBILE) */}
+        <div 
+          className={`absolute top-1/2 -translate-y-1/2 z-[200] flex flex-col gap-3 transition-all duration-300 pointer-events-auto ${
+            isZoomVisible ? 'opacity-40 hover:opacity-100' : 'opacity-20 hover:opacity-100'
+          } ${isMobileLandscape ? 'scale-[0.75] right-2' : 'scale-100 right-3 md:right-5'}`}
+        >
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleAutoScroll('up'); }}
+            className="w-12 h-12 md:w-13 md:h-13 flex items-center justify-center bg-black/30 hover:bg-black/70 backdrop-blur-md border border-white/20 hover:border-white/40 text-white rounded-2xl shadow-2xl active:scale-90 transition-all cursor-pointer group"
+            title="Gulir Naik (Scroll Up)"
+            aria-label="Gulir Naik"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 md:h-7 md:w-7 group-hover:-translate-y-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleAutoScroll('down'); }}
+            className="w-12 h-12 md:w-13 md:h-13 flex items-center justify-center bg-black/30 hover:bg-black/70 backdrop-blur-md border border-white/20 hover:border-white/40 text-white rounded-2xl shadow-2xl active:scale-90 transition-all cursor-pointer group"
+            title="Gulir Turun (Scroll Down)"
+            aria-label="Gulir Turun"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 md:h-7 md:w-7 group-hover:translate-y-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
       </main>
 
       {/* MODAL PELANGGARAN */}

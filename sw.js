@@ -1,8 +1,9 @@
 
-const CACHE_NAME = 'examsy-v2';
+const CACHE_NAME = 'examsy-v3';
 const ASSETS = [
   '/',
-  '/index.html'
+  '/index.html',
+  '/alirsyad-alislamiyyah.png'
 ];
 
 self.addEventListener('install', (event) => {

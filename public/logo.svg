@@ -1,0 +1,113 @@
+<svg viewBox="0 0 1000 680" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <path id="leftRibbonPath" d="M 330 190 C 270 230 255 340 310 470 C 350 550 430 615 490 645" fill="none"/>
+    <path id="rightRibbonPath" d="M 670 190 C 730 230 745 340 690 470 C 650 550 570 615 510 645" fill="none"/>
+  </defs>
+
+  {/* WINGS */}
+  <g id="wings">
+    <path d="M 24 230 C 10 230 5 245 10 260 C 25 330 95 445 220 515 C 235 525 260 530 290 535 L 290 230 Z" fill="#06511a" stroke="#ffffff" stroke-width="8"/>
+    <path d="M 28 276 L 260 276" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+    <path d="M 52 330 L 235 330" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+    <path d="M 78 384 L 215 384" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+    <path d="M 112 438 L 220 438" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+    <path d="M 152 492 L 230 492" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+
+    <path d="M 976 230 C 990 230 995 245 990 260 C 975 330 905 445 780 515 C 765 525 740 530 710 535 L 710 230 Z" fill="#06511a" stroke="#ffffff" stroke-width="8"/>
+    <path d="M 972 276 L 740 276" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+    <path d="M 948 330 L 765 330" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+    <path d="M 922 384 L 785 384" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+    <path d="M 888 438 L 780 438" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+    <path d="M 848 492 L 770 492" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+  </g>
+
+  {/* TOP CREST DOME / RAYS */}
+  <g id="topCrest">
+    <path d="M 500 20 C 510 50 630 110 630 235 C 630 250 600 260 500 260 C 400 260 370 250 370 235 C 370 110 490 50 500 20 Z" fill="#06511a" stroke="#ffffff" stroke-width="10"/>
+    <path d="M 500 38 C 508 65 612 120 612 230 C 580 242 535 248 500 248 C 465 248 420 242 388 230 C 388 120 492 65 500 38 Z" fill="#06511a" stroke="#ffffff" stroke-width="4"/>
+    <path d="M 500 48 L 500 100" stroke="#ffffff" stroke-width="6" stroke-linecap="round" />
+    <path d="M 488 52 C 480 80 475 95 470 120" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <path d="M 470 65 C 460 90 450 110 442 140" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <path d="M 450 82 C 435 110 422 135 415 165" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <path d="M 432 108 C 415 135 402 165 395 195" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <path d="M 512 52 C 520 80 525 95 530 120" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <path d="M 530 65 C 540 90 550 110 558 140" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <path d="M 550 82 C 565 110 578 135 585 165" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <path d="M 568 108 C 585 135 598 165 605 195" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+  </g>
+
+  {/* MAIN HEART EMBLEM */}
+  <g id="mainHeart">
+    <path d="M 500 170 C 525 125 580 105 650 115 C 725 125 765 185 765 270 C 765 375 660 520 500 660 C 340 520 235 375 235 270 C 235 185 275 125 350 115 C 420 105 475 125 500 170 Z" fill="#06511a" stroke="#ffffff" stroke-width="12"/>
+    <path d="M 500 185 C 522 142 575 122 640 132 C 710 142 748 195 748 275 C 748 370 648 505 500 638 C 352 505 252 370 252 275 C 252 195 290 142 360 132 C 425 122 478 142 500 185 Z" fill="#06511a" stroke="#ffffff" stroke-width="4"/>
+    <path d="M 500 230 C 520 190 560 170 615 180 C 670 190 705 235 705 300 C 705 385 615 500 500 595 C 385 500 295 385 295 300 C 295 235 330 190 385 180 C 440 170 480 190 500 230 Z" fill="#06511a" stroke="#ffffff" stroke-width="8"/>
+  </g>
+
+  {/* TEXT ON HEART BANNERS */}
+  <text fill="#ffffff" font-size="25" font-weight="900" font-family="Arial, Helvetica, sans-serif" letter-spacing="2">
+    <textPath href="#leftRibbonPath" startOffset="5%">AL-IRSYAD AL-ISLAMIYYAH</textPath>
+  </text>
+  <text fill="#ffffff" font-size="28" font-weight="bold" font-family="'Traditional Arabic', 'Amiri', 'Arial', sans-serif" direction="rtl">
+    <textPath href="#rightRibbonPath" startOffset="8%">١٣٣٢  جامعية الإصلاح الإسلامية</textPath>
+  </text>
+
+  {/* FLAMING TORCH AT TOP CENTER */}
+  <g id="torch">
+    <path d="M 500 100 C 490 120 480 135 480 150 C 480 165 490 175 495 190 C 485 180 475 168 472 155 C 468 140 475 125 465 110 C 460 125 455 140 458 158 C 462 178 480 198 500 205 C 520 198 538 178 542 158 C 545 140 540 125 535 110 C 525 125 532 140 528 155 C 525 168 515 180 505 190 C 510 175 520 165 520 150 C 520 135 510 120 500 100 Z" fill="#dc2626"/>
+    <path d="M 465 208 L 535 208 L 520 230 L 480 230 Z" fill="#ffffff" stroke="#06511a" stroke-width="3"/>
+  </g>
+
+  {/* TWO STACKED BOOKS */}
+  <g id="books">
+    <path d="M 370 280 Q 435 285 500 295 L 500 330 Q 435 320 370 315 Z" fill="#ffffff" stroke="#06511a" stroke-width="4"/>
+    <path d="M 630 280 Q 565 285 500 295 L 500 330 Q 565 320 630 315 Z" fill="#ffffff" stroke="#06511a" stroke-width="4"/>
+    <path d="M 385 292 Q 435 296 480 302" stroke="#06511a" stroke-width="3" stroke-linecap="round" />
+    <path d="M 388 302 Q 435 306 480 312" stroke="#06511a" stroke-width="3" stroke-linecap="round" />
+    <text x="585" y="312" fill="#06511a" font-size="24" font-weight="bold" font-family="'Traditional Arabic', 'Amiri', serif" text-anchor="middle">ق</text>
+
+    <path d="M 370 340 Q 435 345 500 355 L 500 390 Q 435 380 370 375 Z" fill="#ffffff" stroke="#06511a" stroke-width="4"/>
+    <path d="M 630 340 Q 565 345 500 355 L 500 390 Q 565 380 630 375 Z" fill="#ffffff" stroke="#06511a" stroke-width="4"/>
+    <text x="415" y="370" fill="#06511a" font-size="24" font-weight="bold" font-family="'Traditional Arabic', 'Amiri', serif" text-anchor="middle">ح</text>
+    <path d="M 520 362 Q 565 356 615 352" stroke="#06511a" stroke-width="3" stroke-linecap="round" />
+    <path d="M 520 372 Q 565 366 615 362" stroke="#06511a" stroke-width="3" stroke-linecap="round" />
+  </g>
+
+  {/* DIAMOND IN CENTER */}
+  <g id="diamond">
+    <polygon points="500,285 555,340 500,395 445,340" fill="#ffffff" stroke="#06511a" stroke-width="6"/>
+    <polygon points="500,296 543,340 500,384 457,340" fill="#ffffff" stroke="#06511a" stroke-width="3"/>
+    <text x="500" y="352" fill="#06511a" font-size="36" font-weight="bold" font-family="'Traditional Arabic', 'Amiri', serif" text-anchor="middle">ض</text>
+  </g>
+
+  {/* COMB CRESCENT */}
+  <g id="comb">
+    <path d="M 380 435 Q 500 480 620 435 L 620 450 Q 500 500 380 450 Z" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+    <line x1="410" y1="415" x2="410" y2="445" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <line x1="428" y1="415" x2="428" y2="448" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <line x1="446" y1="415" x2="446" y2="451" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <line x1="464" y1="415" x2="464" y2="455" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <line x1="482" y1="415" x2="482" y2="458" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <line x1="500" y1="415" x2="500" y2="460" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <line x1="518" y1="415" x2="518" y2="458" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <line x1="536" y1="415" x2="536" y2="455" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <line x1="554" y1="415" x2="554" y2="451" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <line x1="572" y1="415" x2="572" y2="448" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+    <line x1="590" y1="415" x2="590" y2="445" stroke="#ffffff" stroke-width="5" stroke-linecap="round" />
+  </g>
+
+  {/* HAND HOLDING TORCH */}
+  <g id="hand">
+    <rect x="494" y="460" width="12" height="70" fill="#ffffff" />
+    <path d="M 475 490 C 475 478 490 475 500 475 C 510 475 525 478 525 490 C 525 510 518 520 515 540 L 508 570 L 492 570 L 485 540 C 482 520 475 510 475 490 Z" fill="#ffffff" stroke="#06511a" stroke-width="3"/>
+    <line x1="478" y1="495" x2="522" y2="495" stroke="#06511a" stroke-width="2.5" />
+    <line x1="480" y1="507" x2="520" y2="507" stroke="#06511a" stroke-width="2.5" />
+    <line x1="482" y1="519" x2="518" y2="519" stroke="#06511a" stroke-width="2.5" />
+    <path d="M 476 492 C 470 500 472 512 478 520" stroke="#06511a" stroke-width="2.5" fill="none" />
+  </g>
+
+  {/* BOTTOM POINT CHEVRONS */}
+  <g id="bottomChevrons">
+    <path d="M 470 590 L 500 625 L 530 590" stroke="#ffffff" stroke-width="5" fill="none" stroke-linecap="round" />
+    <path d="M 480 610 L 500 635 L 520 610" stroke="#ffffff" stroke-width="4" fill="none" stroke-linecap="round" />
+  </g>
+</svg>

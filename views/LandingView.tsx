@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { ViewState } from '../types';
+import { APP_LOGO_URL, APP_LOGO_FALLBACK } from '../constants';
 
 interface LandingViewProps {
   onNavigate: (view: ViewState) => void;
@@ -9,7 +10,15 @@ interface LandingViewProps {
 const LandingView: React.FC<LandingViewProps> = ({ onNavigate }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-8 text-center max-w-4xl mx-auto">
-      <div className="mb-14">
+      <div className="mb-12 flex flex-col items-center">
+        <div className="mb-6 px-5 py-2.5 bg-white rounded-2xl border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)] flex items-center justify-center h-20 max-w-[280px]">
+          <img 
+            src={APP_LOGO_URL} 
+            alt="Logo Al-Irsyad Al-Islamiyyah" 
+            className="max-h-full max-w-full object-contain"
+            onError={(e) => { (e.target as HTMLImageElement).src = APP_LOGO_FALLBACK; }}
+          />
+        </div>
         <span className="text-xs font-black uppercase tracking-[0.25em] text-indigo-500 mb-3 block">
           Platform Evaluasi Akademik
         </span>

@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Room } from '../types';
+import { APP_LOGO_URL, APP_LOGO_FALLBACK } from '../constants';
 
 interface AdminLoginProps {
   rooms: Room[];
@@ -53,9 +54,17 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ rooms, onLogin, onBack }) => {
           Kembali
         </button>
 
-        <div className="relative z-10">
+        <div className="relative z-10 flex flex-col items-center text-center mb-6">
+          <div className="mb-3.5 px-3.5 py-1.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-center h-14 max-w-[200px] shadow-sm">
+            <img 
+              src={APP_LOGO_URL} 
+              alt="Logo Al-Irsyad Al-Islamiyyah" 
+              className="max-h-full max-w-full object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).src = APP_LOGO_FALLBACK; }}
+            />
+          </div>
           <h2 className="text-2xl font-black text-slate-900 mb-0.5 tracking-tighter uppercase leading-none">Portal Staff</h2>
-          <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest mb-8">Admin & Proktor Ruang</p>
+          <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Admin & Proktor Ruang</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 relative z-10">

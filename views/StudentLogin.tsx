@@ -3,6 +3,8 @@ import { ExamSession, Student, StudentStatus } from '../types';
 
 import { validateStudentLogin } from '../services/supabaseService';
 
+import { APP_LOGO_URL, APP_LOGO_FALLBACK } from '../constants';
+
 interface StudentLoginProps {
   sessions: ExamSession[];
   students: Student[];
@@ -12,7 +14,7 @@ interface StudentLoginProps {
 }
 
 const StudentLogin: React.FC<StudentLoginProps> = ({ sessions, students, onLogin, onAdminClick, isProcessing = false }) => {
-  const LOGO_URL = "https://www.alirsyad.or.id/wp-content/uploads/download/alirsyad-alislamiyyah-bw.png"; 
+  const LOGO_URL = APP_LOGO_URL; 
   
   const [formData, setFormData] = useState({
     nis: '',
@@ -174,12 +176,12 @@ const StudentLogin: React.FC<StudentLoginProps> = ({ sessions, students, onLogin
 
       <div className="w-full max-w-[370px] bg-white p-8 md:p-10 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.02)] border border-slate-200/80">
         <div className="text-center mb-8 flex flex-col items-center">
-          <div className="mb-4 w-16 h-16 bg-white rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden p-2">
+          <div className="mb-4 h-16 max-w-[220px] px-3 py-1.5 bg-white rounded-xl flex items-center justify-center border border-slate-100 shadow-sm overflow-hidden">
             <img 
               src={LOGO_URL} 
-              alt="Logo" 
-              className="w-full h-full object-contain"
-              onError={(e) => { (e.target as HTMLImageElement).src = "https://via.placeholder.com/150?text=AL-IRSYAD"; }}
+              alt="Logo Al-Irsyad Al-Islamiyyah" 
+              className="max-h-full max-w-full object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).src = APP_LOGO_FALLBACK; }}
             />
           </div>
           

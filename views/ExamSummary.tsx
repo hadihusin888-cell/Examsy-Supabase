@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { ExamSubmission, ExamSession } from '../types';
+import { APP_LOGO_URL, APP_LOGO_FALLBACK } from '../constants';
 
 interface ExamSummaryProps {
   submission: ExamSubmission;
@@ -11,9 +12,20 @@ interface ExamSummaryProps {
 const ExamSummary: React.FC<ExamSummaryProps> = ({ submission, session, onBack }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-slate-50/50">
-      <div className="w-full max-w-xl bg-white p-10 md:p-12 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.02)] border border-slate-200/80 text-center animate-in fade-in duration-300">
-        <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 border border-emerald-100">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="w-full max-w-xl bg-white p-8 md:p-12 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.02)] border border-slate-200/80 text-center animate-in fade-in duration-300">
+        <div className="mb-6 flex justify-center">
+          <div className="h-16 max-w-[220px] px-3.5 py-1.5 bg-slate-50/80 rounded-xl border border-slate-200/60 shadow-sm flex items-center justify-center">
+            <img 
+              src={APP_LOGO_URL} 
+              alt="Logo Al-Irsyad" 
+              className="max-h-full max-w-full object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).src = APP_LOGO_FALLBACK; }}
+            />
+          </div>
+        </div>
+        
+        <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-100">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
           </svg>
         </div>

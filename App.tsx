@@ -8,6 +8,7 @@ import AdminLogin from './views/AdminLogin';
 import AdminDashboard from './views/AdminDashboard';
 import ProctorDashboard from './views/ProctorDashboard';
 import ExamRoom from './views/ExamRoom';
+import { APP_LOGO_URL, APP_LOGO_FALLBACK } from './constants';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -384,9 +385,17 @@ const App: React.FC = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-10 text-center">
-        <div className="w-12 h-12 border-4 border-white/10 border-t-indigo-500 rounded-full animate-spin mb-6"></div>
+        <div className="mb-6 px-4 py-2 bg-white rounded-xl shadow-lg flex items-center justify-center h-14 max-w-[200px]">
+          <img 
+            src={APP_LOGO_URL} 
+            alt="Logo Al-Irsyad" 
+            className="max-h-full max-w-full object-contain"
+            onError={(e) => { (e.target as HTMLImageElement).src = APP_LOGO_FALLBACK; }}
+          />
+        </div>
+        <div className="w-10 h-10 border-4 border-white/10 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
         <h2 className="text-white font-black uppercase tracking-[0.2em] text-xs">Examsy Cloud Sync...</h2>
-        <p className="text-slate-500 text-[10px] mt-2 uppercase font-bold">Mempersiapkan Database Real-time</p>
+        <p className="text-slate-400 text-[10px] mt-1.5 uppercase font-bold">SMP Al Irsyad Surakarta</p>
       </div>
     );
   }
