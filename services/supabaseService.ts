@@ -201,10 +201,14 @@ export const updateLocalCacheList = (action: string, payload: any) => {
     removeDeletedId("examsy_deleted_students", payload.nis);
     const list = [...cachedStudents];
     const idx = list.findIndex(s => String(s.nis) === String(payload.nis));
+    
+    const existing = idx > -1 ? list[idx] : undefined;
+    const normalized = mergeAndNormalizeStudent(existing, payload);
+    
     if (idx > -1) {
-      list[idx] = { ...list[idx], ...payload };
+      list[idx] = normalized;
     } else {
-      list.push(payload);
+      list.push(normalized);
     }
     localStorage.setItem("examsy_cache_students", JSON.stringify(list));
   } else if (action === 'DELETE_STUDENT') {
@@ -218,7 +222,7 @@ export const updateLocalCacheList = (action: string, payload: any) => {
   } else if (action === 'BULK_UPDATE_STUDENTS') {
     const list = cachedStudents.map(s => {
       if (payload.selectedNis.includes(String(s.nis))) {
-        return { ...s, ...payload.updates };
+        return mergeAndNormalizeStudent(s, payload.updates);
       }
       return s;
     });
@@ -283,6 +287,28 @@ export const normalizeStudent = (s: any): Student => ({
   roomId: String(s.roomId || s.room_id || s.roomid || ''),
   violations: Number(s.violations || 0)
 });
+
+// Helper to safely merge existing student data with partial updates and normalize to a consistent model
+export const mergeAndNormalizeStudent = (existing: Student | undefined, updates: any): Student => {
+  const merged = {
+    nis: String(updates.nis || (existing ? existing.nis : '')),
+    name: updates.name !== undefined ? updates.name : (existing ? existing.name : ''),
+    class: updates.class !== undefined ? updates.class : (existing ? existing.class : ''),
+    password: updates.password !== undefined ? updates.password : (updates.passkey !== undefined ? updates.passkey : (existing ? existing.password : '')),
+    status: updates.status !== undefined ? updates.status : (existing ? existing.status : StudentStatus.BELUM_MASUK),
+    roomId: updates.roomId !== undefined ? updates.roomId : (updates.room_id !== undefined ? updates.room_id : (updates.roomid !== undefined ? updates.roomid : (existing ? existing.roomId : ''))),
+    violations: updates.violations !== undefined ? Number(updates.violations) : (existing && existing.violations !== undefined ? Number(existing.violations) : 0)
+  };
+  return {
+    nis: String(merged.nis),
+    name: String(merged.name || ''),
+    class: String(merged.class || ''),
+    password: String(merged.password || ''),
+    status: merged.status as StudentStatus,
+    roomId: String(merged.roomId || ''),
+    violations: Number(merged.violations || 0)
+  };
+};
 
 export const normalizeRoom = (r: any): Room => ({
   id: String(r.id),
@@ -464,20 +490,17 @@ globalRealtimeChannel.subscribe();
 export const broadcastStudentUpdate = (student: Partial<Student> & { nis: string | number }) => {
   try {
     const cleanNis = String(student.nis);
-    let fullStudent: any = student;
-    if (!student.name || !student.class || !student.roomId) {
-      try {
-        const raw = localStorage.getItem("examsy_cache_students");
-        if (raw) {
-          const cached = JSON.parse(raw) as Student[];
-          const existing = cached.find(s => String(s.nis) === cleanNis);
-          if (existing) {
-            fullStudent = { ...existing, ...student };
-          }
-        }
-      } catch (_) {}
-    }
-    const norm = normalizeStudent(fullStudent);
+    let existing: Student | undefined = undefined;
+    
+    try {
+      const raw = localStorage.getItem("examsy_cache_students");
+      if (raw) {
+        const cached = JSON.parse(raw) as Student[];
+        existing = cached.find(s => String(s.nis) === cleanNis);
+      }
+    } catch (_) {}
+
+    const norm = mergeAndNormalizeStudent(existing, student);
 
     // 1. Broadcast via Supabase WebSocket (0 Postgres DB Reads, 0 Postgres DB Writes!)
     globalRealtimeChannel.send({
@@ -651,6 +674,31 @@ export const subscribeAllStudents = (callback: (event: string, student: Student,
   }
 };
 
+// Helper to normalize class names (e.g. "IX A" or "IX-A" or "Kelas 9A" to "9A")
+export const normalizeClass = (cls: string): string => {
+  let text = String(cls || '').trim().toUpperCase()
+    .replace(/KELAS\s*/g, '')
+    .replace(/KLS\s*/g, '')
+    .replace(/\s+/g, '')
+    .replace(/-/g, '');
+  
+  // Convert roman numerals to digits at the start of class names
+  if (text.startsWith('VIII')) {
+    text = text.replace('VIII', '8');
+  } else if (text.startsWith('VII')) {
+    text = text.replace('VII', '7');
+  } else if (text.startsWith('XII')) {
+    text = text.replace('XII', '12');
+  } else if (text.startsWith('XI')) {
+    text = text.replace('XI', '11');
+  } else if (text.startsWith('IX')) {
+    text = text.replace('IX', '9');
+  } else if (text.startsWith('X')) {
+    text = text.replace('X', '10');
+  }
+  return text;
+};
+
 // Helper for lenient class matching
 export const isClassMatchingLenient = (studentClass: string, inputClass: string): boolean => {
   const sClass = String(studentClass || '').trim().toUpperCase();
@@ -659,12 +707,20 @@ export const isClassMatchingLenient = (studentClass: string, inputClass: string)
   if (!sClass || !iClass) return true; // If one is not specified, be lenient
   if (sClass === iClass) return true;
   
-  // If student class is e.g. "9A" and input class is "9", or "Kelas 9"
-  // Check if they are prefixed/contained
-  if (sClass.startsWith(iClass) || iClass.startsWith(sClass)) return true;
-  if (sClass.includes(iClass) || iClass.includes(sClass)) return true;
+  const sNorm = normalizeClass(sClass);
+  const iNorm = normalizeClass(iClass);
   
-  // Roman numerals and common grade prefix compatibility
+  if (sNorm === iNorm) return true;
+  
+  // If one is a generic grade (e.g. "9") and the other is a specific class (e.g. "9A")
+  if (sNorm === '7' && iNorm.startsWith('7')) return true;
+  if (iNorm === '7' && sNorm.startsWith('7')) return true;
+  if (sNorm === '8' && iNorm.startsWith('8')) return true;
+  if (iNorm === '8' && sNorm.startsWith('8')) return true;
+  if (sNorm === '9' && iNorm.startsWith('9')) return true;
+  if (iNorm === '9' && sNorm.startsWith('9')) return true;
+  
+  // Custom mapping check
   const romanMap: Record<string, string[]> = {
     '7': ['VII', 'KLS 7', 'KLS VII', 'KELAS VII', 'KELAS 7', '7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H', '7I'],
     '8': ['VIII', 'KLS 8', 'KLS VIII', 'KELAS VIII', 'KELAS 8', '8A', '8B', '8C', '8D', '8E', '8F', '8G', '8H', '8I'],
@@ -676,9 +732,18 @@ export const isClassMatchingLenient = (studentClass: string, inputClass: string)
   
   for (const [key, alts] of Object.entries(romanMap)) {
     const allForms = [key, ...alts];
-    const sMatches = allForms.some(f => sClass === f || sClass.includes(f) || sClass.startsWith(f));
-    const iMatches = allForms.some(f => iClass === f || iClass.includes(f) || iClass.startsWith(f));
-    if (sMatches && iMatches) return true;
+    const sMatches = allForms.some(f => sClass === f || sClass.includes(f) || f.includes(sClass));
+    const iMatches = allForms.some(f => iClass === f || iClass.includes(f) || f.includes(iClass));
+    if (sMatches && iMatches) {
+      // Ensure we don't match VII and VIII together or different specific letters if they have them
+      const sHasLetter = /[A-I]/.test(sNorm);
+      const iHasLetter = /[A-I]/.test(iNorm);
+      if (sHasLetter && iHasLetter) {
+        // If both have letters (e.g. 9A and 9B), they MUST match exactly
+        return sNorm === iNorm;
+      }
+      return true;
+    }
   }
 
   return false;
@@ -843,11 +908,30 @@ export const validateStudentLogin = async (
           .map(normalizeSession)
           .filter(sess => !deletedSessionIds.includes(String(sess.id)));
 
-        matchedSession = sessions.find(sess => 
+        // Find all active sessions matching the entered PIN
+        const activeMatchingSessions = sessions.filter(sess => 
           sess.isActive && 
-          String(sess.pin || '').trim().toUpperCase() === trimmedPin &&
-          (!trimmedClass || isClassMatchingLenient(sess.class, trimmedClass) || isClassMatchingLenient(sess.class, student!.class))
+          String(sess.pin || '').trim().toUpperCase() === trimmedPin
+        );
+
+        // 1. Try to find an exact class match (both student class and session class normalize to the same value)
+        matchedSession = activeMatchingSessions.find(sess => 
+          normalizeClass(sess.class) === normalizeClass(student!.class) ||
+          (trimmedClass && normalizeClass(sess.class) === normalizeClass(trimmedClass))
         ) || null;
+
+        // 2. Try lenient class matching
+        if (!matchedSession) {
+          matchedSession = activeMatchingSessions.find(sess => 
+            isClassMatchingLenient(sess.class, student!.class) ||
+            (trimmedClass && isClassMatchingLenient(sess.class, trimmedClass))
+          ) || null;
+        }
+
+        // 3. Fallback to any active session with that PIN
+        if (!matchedSession && activeMatchingSessions.length > 0) {
+          matchedSession = activeMatchingSessions[0];
+        }
       }
     } catch (e) {
       console.warn("Supabase sessions query failed, will check cache/fallback:", e);
@@ -866,22 +950,54 @@ export const validateStudentLogin = async (
     };
 
     const cachedSessions = getCachedSessions().filter(sess => !deletedSessionIds.includes(String(sess.id)));
-    matchedSession = cachedSessions.find(sess => 
+    const activeCachedMatching = cachedSessions.filter(sess => 
       sess.isActive && 
-      String(sess.pin || '').trim().toUpperCase() === trimmedPin &&
-      (!trimmedClass || isClassMatchingLenient(sess.class, trimmedClass) || isClassMatchingLenient(sess.class, student!.class))
+      String(sess.pin || '').trim().toUpperCase() === trimmedPin
+    );
+
+    // 1. Exact class match
+    matchedSession = activeCachedMatching.find(sess => 
+      normalizeClass(sess.class) === normalizeClass(student!.class) ||
+      (trimmedClass && normalizeClass(sess.class) === normalizeClass(trimmedClass))
     ) || null;
 
-    if (!matchedSession && Array.isArray(fallbackSessions) && fallbackSessions.length > 0) {
-      matchedSession = fallbackSessions
-        .filter(sess => !deletedSessionIds.includes(String(sess.id)))
-        .find(sess => 
-          sess.isActive && 
-          String(sess.pin || '').trim().toUpperCase() === trimmedPin &&
-          (!trimmedClass || isClassMatchingLenient(sess.class, trimmedClass) || isClassMatchingLenient(sess.class, student!.class))
-        ) || null;
+    // 2. Lenient class match
+    if (!matchedSession) {
+      matchedSession = activeCachedMatching.find(sess => 
+        isClassMatchingLenient(sess.class, student!.class) ||
+        (trimmedClass && isClassMatchingLenient(sess.class, trimmedClass))
+      ) || null;
     }
 
+    // 3. Any active match
+    if (!matchedSession && activeCachedMatching.length > 0) {
+      matchedSession = activeCachedMatching[0];
+    }
+
+    // fallbackSessions parameter check
+    if (!matchedSession && Array.isArray(fallbackSessions) && fallbackSessions.length > 0) {
+      const activeFallbackMatching = fallbackSessions
+        .filter(sess => !deletedSessionIds.includes(String(sess.id)))
+        .filter(sess => sess.isActive && String(sess.pin || '').trim().toUpperCase() === trimmedPin);
+
+      matchedSession = activeFallbackMatching.find(sess => 
+        normalizeClass(sess.class) === normalizeClass(student!.class) ||
+        (trimmedClass && normalizeClass(sess.class) === normalizeClass(trimmedClass))
+      ) || null;
+
+      if (!matchedSession) {
+        matchedSession = activeFallbackMatching.find(sess => 
+          isClassMatchingLenient(sess.class, student!.class) ||
+          (trimmedClass && isClassMatchingLenient(sess.class, trimmedClass))
+        ) || null;
+      }
+
+      if (!matchedSession && activeFallbackMatching.length > 0) {
+        matchedSession = activeFallbackMatching[0];
+      }
+    }
+
+    // DEFAULT_FALLBACK_SESSIONS check
     if (!matchedSession) {
       matchedSession = DEFAULT_FALLBACK_SESSIONS
         .filter(sess => !deletedSessionIds.includes(String(sess.id)))
@@ -996,14 +1112,22 @@ export const dbAction = async (action: string, payload: any): Promise<boolean> =
             const { password, ...withoutPassword } = updateFields;
             res = await supabase.from('students').update(withoutPassword).eq('nis', String(payload.nis));
             if (res.error) {
-              // Jika update gagal (misal data belum ada), gunakan upsert
+              // Jika update gagal (misal data belum ada), gunakan upsert dengan data lengkap hasil merge agar tidak menimpa dengan kosong
+              let existingFromDb: any = null;
+              try {
+                const { data } = await supabase.from('students').select('*').eq('nis', String(payload.nis)).maybeSingle();
+                if (data) existingFromDb = normalizeStudent(data);
+              } catch (_) {}
+
+              const merged = mergeAndNormalizeStudent(existingFromDb || undefined, payload);
               const fullSnakePayload = {
-                nis: String(payload.nis),
-                name: payload.name || '',
-                class: payload.class || '',
-                status: payload.status || StudentStatus.BELUM_MASUK,
-                room_id: payload.roomId || payload.room_id || null,
-                violations: Number(payload.violations || 0)
+                nis: String(merged.nis),
+                name: merged.name,
+                class: merged.class,
+                status: merged.status,
+                room_id: merged.roomId || null,
+                violations: Number(merged.violations || 0),
+                password: merged.password
               };
               res = await supabase.from('students').upsert(fullSnakePayload);
             }

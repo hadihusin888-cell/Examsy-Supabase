@@ -153,7 +153,7 @@ const App: React.FC = () => {
               }
               const { student, session } = await getDirectStudentAndSession(String(auth.nis), String(auth.sessionId));
 
-              if (student && session) {
+              if (student && session && session.isActive) {
                 if (student.status === StudentStatus.BLOKIR) {
                   localStorage.removeItem('examsy_auth');
                   setView('STUDENT_LOGIN');
@@ -182,7 +182,7 @@ const App: React.FC = () => {
               const matchedStudent = cachedStudents.find((s: Student) => String(s.nis) === String(auth.nis));
               const matchedSession = cachedSessions.find((s: ExamSession) => String(s.id) === String(auth.sessionId));
 
-              if (matchedStudent && matchedSession) {
+              if (matchedStudent && matchedSession && matchedSession.isActive) {
                 if (matchedStudent.status === StudentStatus.BLOKIR) {
                   localStorage.removeItem('examsy_auth');
                   setView('STUDENT_LOGIN');
@@ -235,12 +235,16 @@ const App: React.FC = () => {
     }
   };
 
-  // Hanya lakukan load data jika user berada di menu Admin / Proktor
+  // Load data on initial app mount to populate student & session information (e.g. classes, active sessions, PINs)
   useEffect(() => {
-    if (view !== 'ADMIN_DASHBOARD' && view !== 'PROCTOR_DASHBOARD' && view !== 'ADMIN_LOGIN') {
-      return;
-    }
     refreshData();
+  }, []);
+
+  // Reload data when view changes to Admin/Proktor to guarantee latest state
+  useEffect(() => {
+    if (view === 'ADMIN_DASHBOARD' || view === 'PROCTOR_DASHBOARD') {
+      refreshData();
+    }
   }, [view]);
 
   // Sangat penting: Listener murni real-time WebSocket Supabase untuk murid yang sedang ujian
@@ -496,10 +500,38 @@ const App: React.FC = () => {
                   violations: 0
                 });
               }
-              localStorage.removeItem('examsy_auth');
+              
+              // Pembersihan cache otomatis begitu ujian selesai agar sesi berikutnya (Sesi 2, dst) 100% bersih
+              const keysToClear = [
+                'examsy_auth',
+                'examsy_student_nis',
+                'examsy_student_pass',
+                'examsy_student_class',
+                'examsy_cache_students',
+                'examsy_cache_sessions',
+                'examsy_cache_rooms'
+              ];
+              keysToClear.forEach(key => localStorage.removeItem(key));
+              
+              try {
+                sessionStorage.clear();
+              } catch (_) {}
+
+              // Hapus service worker jika ada
+              if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                  for (let registration of registrations) {
+                    registration.unregister();
+                  }
+                });
+              }
+              
               setCurrentUser(null); 
               setCurrentSession(null); 
               setView('STUDENT_LOGIN'); 
+              
+              // Muat ulang halaman agar siswa mendapatkan state bersih sempurna sejak awal
+              window.location.reload();
             }} 
           />
         )}
