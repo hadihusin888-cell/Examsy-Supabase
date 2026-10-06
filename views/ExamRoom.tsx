@@ -20,6 +20,22 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
   const [iframeKey, setIframeKey] = useState(0); 
   const [zoomLevel, setZoomLevel] = useState(1);
   
+  const [isIpadScrollHackActive, setIsIpadScrollHackActive] = useState(() => {
+    if (typeof navigator !== 'undefined') {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      return isIOS;
+    }
+    return false;
+  });
+
+  const [useGoogleViewer, setUseGoogleViewer] = useState(() => {
+    if (typeof navigator !== 'undefined') {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      return isIOS;
+    }
+    return false;
+  });
+
   const [isZoomVisible, setIsZoomVisible] = useState(true);
   const zoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isMobileLandscape, setIsMobileLandscape] = useState(false);
@@ -78,6 +94,8 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
       }
       const separator = sanitized.includes('?') ? '&' : '?';
       sanitized = `${sanitized}${separator}rm=minimal`;
+    } else if (useGoogleViewer) {
+      sanitized = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(url)}`;
     }
     return sanitized;
   };
@@ -550,6 +568,25 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
+
+          {/* iPad/iOS Scroll Issue Helper Button */}
+          <button 
+            onClick={() => {
+              setIsIpadScrollHackActive(prev => !prev);
+              setIframeKey(prev => prev + 1);
+            }} 
+            className={`transition-all rounded-lg flex items-center gap-1 py-1 px-2 border font-black uppercase text-[7px] md:text-[9px] ${
+              isIpadScrollHackActive 
+                ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30' 
+                : 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:text-white hover:border-slate-600'
+            }`}
+            title="Aktifkan Mode Gulir khusus Apple iPad / iOS jika scroll macet"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            <span>iPad Scroll: {isIpadScrollHackActive ? 'ON' : 'OFF'}</span>
+          </button>
           <div className={`font-mono font-black ${isMobileLandscape ? 'text-xs' : 'text-sm md:text-lg'} ${timeLeft < 300 ? 'text-red-500 animate-pulse' : 'text-indigo-400'}`}>
             {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
           </div>
@@ -557,23 +594,37 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
         </div>
       </header>
 
-      <main className={`flex-1 bg-slate-900 relative transition-all duration-300 overflow-hidden ${(isFocusLost || isBlocked || (hasConsented && !isFullscreen && !isTabletOrMobile)) ? 'blur-3xl pointer-events-none' : ''}`}>
+       <main className={`flex-1 bg-slate-900 relative transition-all duration-300 overflow-hidden ${(isFocusLost || isBlocked || (hasConsented && !isFullscreen && !isTabletOrMobile)) ? 'blur-3xl pointer-events-none' : ''}`}>
         <div 
           ref={scrollContainerRef}
           className="w-full h-full overflow-auto scrollbar-hide pb-40" 
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           <div 
-            className={`w-full h-full relative transition-transform duration-300 ease-out origin-top ${isTabletOrMobile ? 'min-h-[100%]' : ''}`} 
-            style={{ transform: `scale(${zoomLevel})` }}
+            className={`w-full relative transition-transform duration-300 ease-out origin-top ${isTabletOrMobile ? 'min-h-[100%]' : ''}`} 
+            style={{ 
+              transform: `scale(${zoomLevel})`,
+              height: isIpadScrollHackActive ? '4000px' : '100%'
+            }}
           >
-            <div className="relative w-full h-full overflow-hidden" style={{ marginTop: `-${CLIPPING_TOP}px`, marginLeft: `-${CLIPPING_SIDE}px`, width: `calc(100% + ${CLIPPING_SIDE * 2}px)`, height: `calc(100% + ${CLIPPING_TOP + CLIPPING_BOTTOM}px)` }}>
+            <div 
+              className="relative w-full overflow-hidden" 
+              style={{ 
+                marginTop: `-${CLIPPING_TOP}px`, 
+                marginLeft: `-${CLIPPING_SIDE}px`, 
+                width: `calc(100% + ${CLIPPING_SIDE * 2}px)`, 
+                height: isIpadScrollHackActive ? '4000px' : `calc(100% + ${CLIPPING_TOP + CLIPPING_BOTTOM}px)` 
+              }}
+            >
               {hasConsented && session.pdfUrl && (
                 <iframe 
                   key={iframeKey} 
                   src={sanitizePdfUrl(session.pdfUrl)} 
-                  className="w-full h-full border-none" 
-                  style={isTabletOrMobile ? { height: '100%', minHeight: '100%' } : {}}
+                  className="w-full border-none" 
+                  style={{
+                    height: isIpadScrollHackActive ? '4000px' : '100%',
+                    minHeight: isIpadScrollHackActive ? '4000px' : '100%'
+                  }}
                   title="Soal PDF" 
                 />
               )}
