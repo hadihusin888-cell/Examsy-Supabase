@@ -892,11 +892,11 @@ export const validateStudentLogin = async (
     };
   }
 
-  // 7. Find Matching Exam Session by PIN and Class
-  let matchedSession: ExamSession | null = null;
+  // 7. Find Matching Exam Session by PIN and Class (Strict Match)
   const deletedSessionIds = getDeletedIds("examsy_deleted_sessions");
+  let allActiveSessionsWithPin: ExamSession[] = [];
 
-  // A. Try Supabase for sessions first
+  // A. Gather active sessions with matching PIN from Supabase
   if (!checkIsOfflineFallbackActive()) {
     try {
       const { data: rawSessions, error: sessionErr } = await supabase
@@ -908,38 +908,18 @@ export const validateStudentLogin = async (
           .map(normalizeSession)
           .filter(sess => !deletedSessionIds.includes(String(sess.id)));
 
-        // Find all active sessions matching the entered PIN
-        const activeMatchingSessions = sessions.filter(sess => 
+        allActiveSessionsWithPin = sessions.filter(sess => 
           sess.isActive && 
           String(sess.pin || '').trim().toUpperCase() === trimmedPin
         );
-
-        // 1. Try to find an exact class match (both student class and session class normalize to the same value)
-        matchedSession = activeMatchingSessions.find(sess => 
-          normalizeClass(sess.class) === normalizeClass(student!.class) ||
-          (trimmedClass && normalizeClass(sess.class) === normalizeClass(trimmedClass))
-        ) || null;
-
-        // 2. Try lenient class matching
-        if (!matchedSession) {
-          matchedSession = activeMatchingSessions.find(sess => 
-            isClassMatchingLenient(sess.class, student!.class) ||
-            (trimmedClass && isClassMatchingLenient(sess.class, trimmedClass))
-          ) || null;
-        }
-
-        // 3. Fallback to any active session with that PIN
-        if (!matchedSession && activeMatchingSessions.length > 0) {
-          matchedSession = activeMatchingSessions[0];
-        }
       }
     } catch (e) {
-      console.warn("Supabase sessions query failed, will check cache/fallback:", e);
+      console.warn("Supabase sessions query failed, will check cache:", e);
     }
   }
 
-  // B. Fallback to cached sessions
-  if (!matchedSession) {
+  // B. Gather active sessions with matching PIN from Local Cache
+  if (allActiveSessionsWithPin.length === 0) {
     const getCachedSessions = (): ExamSession[] => {
       try {
         const raw = localStorage.getItem("examsy_cache_sessions");
@@ -950,68 +930,56 @@ export const validateStudentLogin = async (
     };
 
     const cachedSessions = getCachedSessions().filter(sess => !deletedSessionIds.includes(String(sess.id)));
-    const activeCachedMatching = cachedSessions.filter(sess => 
+    allActiveSessionsWithPin = cachedSessions.filter(sess => 
       sess.isActive && 
       String(sess.pin || '').trim().toUpperCase() === trimmedPin
     );
+  }
 
-    // 1. Exact class match
-    matchedSession = activeCachedMatching.find(sess => 
+  // C. Gather active sessions with matching PIN from memory fallbacks
+  if (allActiveSessionsWithPin.length === 0) {
+    const allFallbacks = [
+      ...(Array.isArray(fallbackSessions) ? fallbackSessions : []),
+      ...DEFAULT_FALLBACK_SESSIONS
+    ].filter(sess => !deletedSessionIds.includes(String(sess.id)));
+
+    allActiveSessionsWithPin = allFallbacks.filter(sess => 
+      sess.isActive && 
+      String(sess.pin || '').trim().toUpperCase() === trimmedPin
+    );
+  }
+
+  // D. Find the specific session matching student's class (Exact or Lenient)
+  let matchedSession: ExamSession | null = null;
+  if (allActiveSessionsWithPin.length > 0) {
+    // 1. Try to find an exact class match
+    matchedSession = allActiveSessionsWithPin.find(sess => 
       normalizeClass(sess.class) === normalizeClass(student!.class) ||
       (trimmedClass && normalizeClass(sess.class) === normalizeClass(trimmedClass))
     ) || null;
 
-    // 2. Lenient class match
+    // 2. Try lenient class matching
     if (!matchedSession) {
-      matchedSession = activeCachedMatching.find(sess => 
+      matchedSession = allActiveSessionsWithPin.find(sess => 
         isClassMatchingLenient(sess.class, student!.class) ||
         (trimmedClass && isClassMatchingLenient(sess.class, trimmedClass))
       ) || null;
     }
+  }
 
-    // 3. Any active match
-    if (!matchedSession && activeCachedMatching.length > 0) {
-      matchedSession = activeCachedMatching[0];
-    }
-
-    // fallbackSessions parameter check
-    if (!matchedSession && Array.isArray(fallbackSessions) && fallbackSessions.length > 0) {
-      const activeFallbackMatching = fallbackSessions
-        .filter(sess => !deletedSessionIds.includes(String(sess.id)))
-        .filter(sess => sess.isActive && String(sess.pin || '').trim().toUpperCase() === trimmedPin);
-
-      matchedSession = activeFallbackMatching.find(sess => 
-        normalizeClass(sess.class) === normalizeClass(student!.class) ||
-        (trimmedClass && normalizeClass(sess.class) === normalizeClass(trimmedClass))
-      ) || null;
-
-      if (!matchedSession) {
-        matchedSession = activeFallbackMatching.find(sess => 
-          isClassMatchingLenient(sess.class, student!.class) ||
-          (trimmedClass && isClassMatchingLenient(sess.class, trimmedClass))
-        ) || null;
-      }
-
-      if (!matchedSession && activeFallbackMatching.length > 0) {
-        matchedSession = activeFallbackMatching[0];
-      }
-    }
-
-    // DEFAULT_FALLBACK_SESSIONS check
-    if (!matchedSession) {
-      matchedSession = DEFAULT_FALLBACK_SESSIONS
-        .filter(sess => !deletedSessionIds.includes(String(sess.id)))
-        .find(sess => 
-          sess.isActive && 
-          String(sess.pin || '').trim().toUpperCase() === trimmedPin
-        ) || null;
-    }
+  // E. Strict Access Rule: Block login if the PIN exists but is registered for a different class
+  if (allActiveSessionsWithPin.length > 0 && !matchedSession) {
+    const sessionClasses = Array.from(new Set(allActiveSessionsWithPin.map(s => s.class))).join(', ');
+    return {
+      success: false,
+      error: `Akses Ditolak: PIN "${trimmedPin}" ini diperuntukkan untuk Kelas (${sessionClasses}), sedangkan Anda terdaftar di Kelas "${student.class}". Silakan minta PIN yang benar kepada Proktor kelas Anda!`
+    };
   }
 
   if (!matchedSession) {
     return { 
       success: false, 
-      error: `PIN Sesi "${trimmedPin}" tidak aktif, salah, atau tidak sesuai dengan kelas Anda. Tanyakan PIN yang benar ke Pengawas/Proktor.` 
+      error: `PIN Sesi "${trimmedPin}" salah, tidak aktif, atau tidak terdaftar. Silakan tanyakan PIN yang benar ke Pengawas/Proktor.` 
     };
   }
 
