@@ -36,6 +36,29 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
     return false;
   });
 
+  // Device & Platform Detection for Kiosk Mode (Android & Windows only, strictly NOT iOS)
+  const deviceInfo = React.useMemo(() => {
+    if (typeof navigator === 'undefined') {
+      return { isAndroid: false, isWindows: false, isIOS: false, isKioskEligible: false, osLabel: 'Desktop' };
+    }
+    const ua = navigator.userAgent || '';
+    const platform = (navigator as any).userAgentData?.platform || navigator.platform || '';
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isAndroid = /Android/i.test(ua);
+    const isWindows = /Windows|Win32|Win64|WOW64/i.test(ua) || /Win/i.test(platform);
+    
+    // Kiosk Mode is specifically applied to Android and Windows, and strictly NOT on iOS
+    const isKioskEligible = (isAndroid || isWindows) && !isIOS;
+    
+    let osLabel = 'Desktop';
+    if (isIOS) osLabel = 'iOS';
+    else if (isAndroid) osLabel = 'Android';
+    else if (isWindows) osLabel = 'Windows';
+    
+    return { isAndroid, isWindows, isIOS, isKioskEligible, osLabel };
+  }, []);
+
+  const [isKioskLocked, setIsKioskLocked] = useState(false);
   const [isZoomVisible, setIsZoomVisible] = useState(true);
   const zoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isMobileLandscape, setIsMobileLandscape] = useState(false);
@@ -213,9 +236,41 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
     };
   }, [requestWakeLock, releaseWakeLock, isBlocked]);
 
+  const playKioskAlarm = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.35);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch (_) {}
+  }, []);
+
+  const triggerKioskVibration = useCallback(() => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([300, 100, 300]);
+      }
+    } catch (_) {}
+  }, []);
+
   const handleFinalFinish = () => {
     releaseWakeLock();
     if (zoomTimerRef.current) clearTimeout(zoomTimerRef.current);
+    if (deviceInfo.isWindows && (navigator as any).keyboard?.unlock) {
+      try {
+        (navigator as any).keyboard.unlock();
+      } catch (_) {}
+    }
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
@@ -225,7 +280,7 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
   const triggerViolation = useCallback((reason: string) => {
     if (isBlocked) return;
     const now = Date.now();
-    // Berikan toleransi 3 detik untuk gangguan sistem (seperti notifikasi atau overlay Family Link)
+    // Berikan toleransi 3 detik untuk gangguan sistem
     if (now - lastViolationTime.current < 3000) return; 
     lastViolationTime.current = now;
     setIsFocusLost(true);
@@ -240,21 +295,122 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
     });
   }, [isBlocked, violations, student, onAction]);
 
+  const reEnterKioskMode = useCallback(async () => {
+    try {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen({ navigationUI: 'hide' } as any);
+      } else if ((elem as any).webkitRequestFullscreen) {
+        await (elem as any).webkitRequestFullscreen();
+      }
+      if (deviceInfo.isWindows && (navigator as any).keyboard?.lock) {
+        (navigator as any).keyboard.lock(['Escape', 'F11', 'F5', 'KeyN', 'KeyT', 'KeyW', 'Tab']).catch(() => {});
+      }
+    } catch (err) {
+      console.warn("Fullscreen request error:", err);
+    } finally {
+      setIsFocusLost(false);
+      setIsKioskLocked(false);
+      resetZoomTimer();
+    }
+  }, [deviceInfo.isWindows, resetZoomTimer]);
+
+  // Kiosk Keyboard and Navigation Lockdown (Khusus Windows & Android, tidak mengganggu iOS)
   useEffect(() => {
-    const handleContextMenu = (e: MouseEvent) => e.preventDefault();
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey && (e.key === 'p' || e.key === 's' || e.key === 'u')) || e.key === 'F12') {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      return false;
+    };
+
+    const handleCopyPaste = (e: ClipboardEvent) => {
+      e.preventDefault();
+      return false;
+    };
+
+    const handleSelectStart = (e: Event) => {
+      if (deviceInfo.isKioskEligible) {
         e.preventDefault();
-        triggerViolation("Unauthorized Shortcut");
+        return false;
       }
     };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Filter shortcut tombol untuk Windows & Android Kiosk Mode
+      if (deviceInfo.isKioskEligible) {
+        const isFKey = e.key === 'F11' || e.key === 'F12' || e.key === 'F5' || e.key === 'F1';
+        const isCtrlShort = e.ctrlKey && (
+          e.key === 'r' || e.key === 'R' ||
+          e.key === 'u' || e.key === 'U' ||
+          e.key === 'p' || e.key === 'P' ||
+          e.key === 's' || e.key === 'S' ||
+          e.key === 'n' || e.key === 'N' ||
+          e.key === 't' || e.key === 'T' ||
+          e.key === 'w' || e.key === 'W' ||
+          e.key === 'h' || e.key === 'H' ||
+          e.key === 'j' || e.key === 'J'
+        );
+        const isDevTools = (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c'));
+        const isAltNav = e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight');
+        const isEscape = e.key === 'Escape';
+
+        if (isFKey || isCtrlShort || isDevTools || isAltNav || isEscape) {
+          e.preventDefault();
+          e.stopPropagation();
+          triggerViolation(`Pintasan Terlarang (${e.key}) di Mode Kiosk`);
+          playKioskAlarm();
+          triggerKioskVibration();
+          setIsKioskLocked(true);
+        }
+      } else {
+        // Fallback proteksi standar untuk iOS / perangkat lain tanpa Kiosk
+        if ((e.ctrlKey && (e.key === 'p' || e.key === 's' || e.key === 'u')) || e.key === 'F12') {
+          e.preventDefault();
+          triggerViolation("Unauthorized Shortcut");
+        }
+      }
+    };
+
+    // Cegah keluar tab / refresh mendadak
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasConsented && !isBlocked) {
+        e.preventDefault();
+        e.returnValue = 'Ujian sedang berlangsung! Keluar akan membatalkan sesi ujian Anda.';
+        return e.returnValue;
+      }
+    };
+
+    // Cegah tombol back browser
+    window.history.pushState(null, '', window.location.href);
+    const handlePopState = () => {
+      window.history.pushState(null, '', window.location.href);
+      if (deviceInfo.isKioskEligible && hasConsented && !isBlocked) {
+        triggerViolation("Percobaan Kembali / Navigasi Browser");
+        playKioskAlarm();
+        triggerKioskVibration();
+        setIsKioskLocked(true);
+      }
+    };
+
     window.addEventListener('contextmenu', handleContextMenu);
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('copy', handleCopyPaste);
+    window.addEventListener('cut', handleCopyPaste);
+    window.addEventListener('paste', handleCopyPaste);
+    document.addEventListener('selectstart', handleSelectStart);
+    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('popstate', handlePopState);
+
     return () => {
       window.removeEventListener('contextmenu', handleContextMenu);
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('copy', handleCopyPaste);
+      window.removeEventListener('cut', handleCopyPaste);
+      window.removeEventListener('paste', handleCopyPaste);
+      document.removeEventListener('selectstart', handleSelectStart);
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
     };
-  }, [triggerViolation]);
+  }, [hasConsented, isBlocked, deviceInfo.isKioskEligible, triggerViolation, playKioskAlarm, triggerKioskVibration]);
 
   // Fullscreen change effect
   useEffect(() => {
@@ -262,9 +418,12 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
       const isFs = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
       setIsFullscreen(isFs);
       
-      // Jika sudah mulai ujian (hasConsented) dan keluar dari fullscreen, anggap pelanggaran
-      if (hasConsented && !isFs && !isBlocked) {
-        triggerViolation("Keluar Mode Fullscreen");
+      // Jika Kiosk Mode aktif (Android & Windows) dan keluar dari fullscreen, anggap pelanggaran dan kunci layar
+      if (hasConsented && !isFs && !isBlocked && deviceInfo.isKioskEligible) {
+        triggerViolation("Keluar dari Mode Kiosk (Fullscreen)");
+        playKioskAlarm();
+        triggerKioskVibration();
+        setIsKioskLocked(true);
       }
     };
 
@@ -275,7 +434,7 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
       document.removeEventListener('fullscreenchange', handleFsChange);
       document.removeEventListener('webkitfullscreenchange', handleFsChange);
     };
-  }, [hasConsented, isBlocked, triggerViolation]);
+  }, [hasConsented, isBlocked, deviceInfo.isKioskEligible, triggerViolation, playKioskAlarm, triggerKioskVibration]);
 
   // Countdown timer effect
   useEffect(() => {
@@ -291,19 +450,35 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
 
   useEffect(() => {
     if (!hasConsented || isBlocked) return;
-    const handleVisibilityChange = () => { if (document.hidden) triggerViolation("App Switched"); };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        triggerViolation("Aplikasi Beralih / Tab Ditukar");
+        if (deviceInfo.isKioskEligible) {
+          playKioskAlarm();
+          triggerKioskVibration();
+          setIsKioskLocked(true);
+        }
+      }
+    };
+
     const handleBlur = () => {
-      // Pengetatan deteksi: Kurangi delay untuk respon lebih cepat terhadap panel sistem
+      // Tangkap perpindahan jendela (Alt+Tab Windows / Split-screen / Panel Notifikasi Android)
       setTimeout(() => {
-        if (!document.hasFocus()) triggerViolation("Window Blur / Quick Settings");
+        if (!document.hasFocus()) {
+          triggerViolation("Layar Kehilangan Fokus (Panel Sistem / Buka Aplikasi Lain)");
+          if (deviceInfo.isKioskEligible) {
+            playKioskAlarm();
+            triggerKioskVibration();
+            setIsKioskLocked(true);
+          }
+        }
       }, 200);
     };
     
-    // Deteksi swipe dari area atas layar (Status Bar / Quick Settings)
+    // Deteksi swipe dari area atas layar (Status Bar / Quick Settings Android)
     const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches[0].clientY < 25) {
-        // Jika sentuhan dimulai di 25px teratas, kemungkinan besar akan menarik panel
-        // Kita tidak bisa menghentikan OS, tapi bisa memberikan feedback visual/peringatan
+      if (deviceInfo.isAndroid && e.touches[0].clientY < 35) {
         resetZoomTimer();
       }
     };
@@ -311,12 +486,13 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
+
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('touchstart', handleTouchStart);
     };
-  }, [hasConsented, triggerViolation, isBlocked]);
+  }, [hasConsented, triggerViolation, isBlocked, deviceInfo.isKioskEligible, deviceInfo.isAndroid, playKioskAlarm, triggerKioskVibration, resetZoomTimer]);
 
   // Pastikan status siswa terdaftar sebagai SEDANG_UJIAN saat berada di ruang ujian
   useEffect(() => {
@@ -330,17 +506,24 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
 
   const startPersistence = async () => {
     try {
-      const elem = document.documentElement;
-      if (elem.requestFullscreen) {
-        await elem.requestFullscreen();
-      } else if ((elem as any).webkitRequestFullscreen) {
-        await (elem as any).webkitRequestFullscreen();
+      // Aktifkan Fullscreen Kiosk Mode hanya untuk Android dan Windows (dilewati untuk iOS)
+      if (deviceInfo.isKioskEligible) {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          await elem.requestFullscreen({ navigationUI: 'hide' } as any);
+        } else if ((elem as any).webkitRequestFullscreen) {
+          await (elem as any).webkitRequestFullscreen();
+        }
+        if (deviceInfo.isWindows && (navigator as any).keyboard?.lock) {
+          await (navigator as any).keyboard.lock(['Escape', 'F11', 'F5', 'KeyN', 'KeyT', 'KeyW', 'Tab']).catch(() => {});
+        }
       }
     } catch (err) {
-      // Fullscreen mungkin gagal di iOS Safari, tetap lanjut
+      console.warn("Fullscreen request error:", err);
     } finally {
       await requestWakeLock();
       setHasConsented(true);
+      setIsKioskLocked(false);
       // Update status siswa ke SEDANG_UJIAN saat tombol Mulai Ujian diklik
       onAction('UPDATE_STUDENT', {
         ...student,
@@ -421,43 +604,77 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
         </div>
       )}
 
-      {/* MODAL KONFIRMASI MULAI */}
+      {/* MODAL KONFIRMASI MULAI (KIOSK MODE UNTUK ANDROID & WINDOWS, BEBAS UNTUK IOS) */}
       {!hasConsented && !isBlocked && (
         <div className="fixed inset-0 z-[1000] bg-slate-950/90 flex items-center justify-center p-6 backdrop-blur-md">
-          <div className="bg-white w-full max-w-[400px] p-8 md:p-10 rounded-2xl text-center shadow-2xl border-t-8 border-indigo-600 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+          <div className="bg-white w-full max-w-[440px] p-8 md:p-10 rounded-[2.5rem] text-center shadow-2xl border-t-8 border-indigo-600 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
-            <h2 className="text-2xl font-black text-slate-900 mb-3 uppercase tracking-tight leading-none">Konfirmasi Ujian</h2>
-            <p className="text-slate-500 text-xs leading-relaxed mb-4 font-medium">
-              Sistem akan mengaktifkan <span className="text-indigo-600 font-bold">Layar Otomatis Standby ON</span> (layar tidak akan mati/tidur) & <span className="text-indigo-600 font-bold">Mode Proteksi Layar</span>. Dilarang keras <span className="text-red-600 font-bold">menurunkan panel notifikasi/pengaturan</span> atau berpindah aplikasi selama ujian berlangsung.
-            </p>
 
-            {(isIPhone || isIPad) && (
-              <div className="mb-5 p-3 bg-amber-50 rounded-xl border border-amber-200 text-left">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] font-black text-amber-800 uppercase flex items-center gap-1">
-                    🍏 Panduan Keamanan iOS
-                  </span>
-                  <button 
-                    type="button"
-                    onClick={() => setShowIosGuide(true)}
-                    className="text-[9px] font-black text-indigo-600 underline hover:text-indigo-800 cursor-pointer"
-                  >
-                    Cara Kunci Layar (Akses Terpandu)
-                  </button>
+            {deviceInfo.isKioskEligible ? (
+              <>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black uppercase tracking-wider mb-2">
+                  <span>🛡️ KIOSK MODE AKTIF ({deviceInfo.osLabel.toUpperCase()})</span>
                 </div>
-                <p className="text-[10px] text-amber-700 leading-snug">
-                  Gunakan fitur bawaan Apple <strong>Akses Terpandu (Guided Access)</strong> dengan menekan tombol Power 3x agar aplikasi terkunci penuh dan notifikasi mati.
-                </p>
-              </div>
-            )}
+                <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-3 uppercase tracking-tight leading-none">Ujian Kiosk Terkunci</h2>
+                
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 text-left space-y-2.5 mb-6">
+                  <div className="flex items-start gap-2 text-[11px] text-slate-700 font-bold">
+                    <span className="text-indigo-600 shrink-0 mt-0.5">🖥️</span>
+                    <span><strong>Layar Penuh Kiosk:</strong> Layar terkunci penuh (Fullscreen) otomatis tanpa bilah navigasi & tab browser.</span>
+                  </div>
+                  <div className="flex items-start gap-2 text-[11px] text-slate-700 font-bold">
+                    <span className="text-indigo-600 shrink-0 mt-0.5">⚡</span>
+                    <span><strong>Layar Standby ON:</strong> Layar perangkat tidak akan redup atau mati selama ujian berlangsung.</span>
+                  </div>
+                  <div className="flex items-start gap-2 text-[11px] text-red-600 font-bold">
+                    <span className="shrink-0 mt-0.5">⚠️</span>
+                    <span><strong>Dilarang Keras:</strong> Keluar dari fullscreen, menekan tombol pintasan (shortcut), membuka tab/aplikasi lain, atau menarik notifikasi.</span>
+                  </div>
+                </div>
 
-            <button onClick={startPersistence} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl font-black text-xs md:text-sm uppercase tracking-widest transition-all active:scale-95 cursor-pointer">
-              Mulai Ujian Sekarang
-            </button>
+                <button onClick={startPersistence} className="w-full bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-700 hover:to-emerald-700 text-white py-4 md:py-5 rounded-2xl font-black text-xs md:text-sm uppercase tracking-widest shadow-xl shadow-indigo-100 transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2">
+                  <span>🛡️ Aktifkan Kiosk & Mulai Ujian</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-black uppercase tracking-wider mb-2">
+                  <span>🍏 MODE UJIAN IOS (APPLE)</span>
+                </div>
+                <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-3 uppercase tracking-tight leading-none">Konfirmasi Ujian</h2>
+                <p className="text-slate-500 text-xs leading-relaxed mb-4 font-medium">
+                  Sistem mendeteksi Anda menggunakan perangkat Apple iOS. Fitur <span className="text-slate-700 font-bold">Kiosk Mode dilewati</span> untuk kompatibilitas Safari. Layar otomatis <span className="text-indigo-600 font-bold">Standby ON</span>.
+                </p>
+
+                {(isIPhone || isIPad) && (
+                  <div className="mb-5 p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-left">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-black text-amber-800 uppercase flex items-center gap-1">
+                        🔒 Saran Keamanan iOS
+                      </span>
+                      <button 
+                        type="button"
+                        onClick={() => setShowIosGuide(true)}
+                        className="text-[9px] font-black text-indigo-600 underline hover:text-indigo-800 cursor-pointer"
+                      >
+                        Buka Panduan Akses Terpandu
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-amber-700 leading-snug">
+                      Gunakan fitur bawaan Apple <strong>Akses Terpandu (Guided Access)</strong> dengan menekan tombol Power 3x agar layar terkunci dan notifikasi mati.
+                    </p>
+                  </div>
+                )}
+
+                <button onClick={startPersistence} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black text-xs md:text-sm uppercase tracking-widest transition-all active:scale-95 cursor-pointer">
+                  Mulai Ujian Sekarang
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -544,21 +761,6 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
           <h1 className="text-white font-black uppercase tracking-tighter truncate text-xs md:text-lg">{session.name}</h1>
         </div>
         <div className={`flex-1 flex items-center justify-end transition-all ${isMobileLandscape ? 'gap-2' : 'gap-3 md:gap-4'}`}>
-          {/* Standby On Indicator */}
-          <div 
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-full border transition-all ${
-              isWakeLockActive 
-                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' 
-                : 'bg-amber-500/15 border-amber-500/30 text-amber-400'
-            } ${isMobileLandscape ? 'text-[7px] py-0.5 px-1.5' : 'text-[8px] md:text-[10px]'}`}
-            title={isWakeLockActive ? "Layar otomatis Standby ON (tidak akan redup / mati)" : "Mengaktifkan layar standby..."}
-          >
-            <span className={`rounded-full shrink-0 ${isMobileLandscape ? 'w-1 h-1' : 'w-1.5 h-1.5'} ${isWakeLockActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'}`}></span>
-            <span className={`font-black tracking-wider uppercase ${isMobileLandscape ? 'text-[6px]' : ''}`}>
-              {isWakeLockActive ? 'Standby On' : 'Standby...'}
-            </span>
-          </div>
-
           <button 
             onClick={() => setIframeKey(prev => prev + 1)} 
             className={`text-indigo-400 hover:text-white transition-colors ${isMobileLandscape ? 'p-1' : 'p-2'}`}
@@ -569,24 +771,6 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
             </svg>
           </button>
 
-          {/* iPad/iOS Scroll Issue Helper Button */}
-          <button 
-            onClick={() => {
-              setIsIpadScrollHackActive(prev => !prev);
-              setIframeKey(prev => prev + 1);
-            }} 
-            className={`transition-all rounded-lg flex items-center gap-1 py-1 px-2 border font-black uppercase text-[7px] md:text-[9px] ${
-              isIpadScrollHackActive 
-                ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30' 
-                : 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:text-white hover:border-slate-600'
-            }`}
-            title="Aktifkan Mode Gulir khusus Apple iPad / iOS jika scroll macet"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-            </svg>
-            <span>iPad Scroll: {isIpadScrollHackActive ? 'ON' : 'OFF'}</span>
-          </button>
           <div className={`font-mono font-black ${isMobileLandscape ? 'text-xs' : 'text-sm md:text-lg'} ${timeLeft < 300 ? 'text-red-500 animate-pulse' : 'text-indigo-400'}`}>
             {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
           </div>
@@ -594,7 +778,7 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
         </div>
       </header>
 
-       <main className={`flex-1 bg-slate-900 relative transition-all duration-300 overflow-hidden ${(isFocusLost || isBlocked || (hasConsented && !isFullscreen && !isTabletOrMobile)) ? 'blur-3xl pointer-events-none' : ''}`}>
+       <main className={`flex-1 bg-slate-900 relative transition-all duration-300 overflow-hidden ${(isFocusLost || isKioskLocked || isBlocked || (hasConsented && !isFullscreen && deviceInfo.isKioskEligible)) ? 'blur-3xl pointer-events-none' : ''}`}>
         <div 
           ref={scrollContainerRef}
           className="w-full h-full overflow-auto scrollbar-hide pb-40" 
@@ -679,26 +863,56 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
         </div>
       </main>
 
-      {/* MODAL PELANGGARAN */}
-      {isFocusLost && hasConsented && !isBlocked && (
-        <div className="fixed inset-0 z-[5000] bg-slate-950/95 flex items-center justify-center p-8 backdrop-blur-xl">
-          <div className="bg-white w-full max-w-[360px] p-10 rounded-[2.5rem] text-center shadow-2xl border-b-8 border-red-500 animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.268 15c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+      {/* MODAL KIOSK TERKUNCI (ANDROID & WINDOWS) ATAU PERINGATAN (IOS) */}
+      {(isFocusLost || isKioskLocked) && hasConsented && !isBlocked && (
+        <div className="fixed inset-0 z-[5000] bg-slate-950/95 flex items-center justify-center p-6 md:p-8 backdrop-blur-2xl">
+          <div className="bg-white w-full max-w-[420px] p-8 md:p-10 rounded-[2.5rem] text-center shadow-2xl border-b-8 border-red-500 animate-in zoom-in-95 duration-200">
+            <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-inner border border-red-100">
+              {deviceInfo.isKioskEligible ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.268 15c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              )}
             </div>
-            <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight leading-none">Terdeteksi Pelanggaran</h3>
-            <p className="text-slate-600 text-sm font-bold uppercase mb-6 leading-relaxed">
-              Sistem mendeteksi aktivitas luar aplikasi atau keluar dari mode fullscreen.
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100/80 text-red-700 text-[10px] font-black uppercase tracking-wider mb-2">
+              <span>{deviceInfo.isKioskEligible ? `🛡️ KIOSK TERKUNCI (${deviceInfo.osLabel})` : '⚠️ PERINGATAN FOKUS'}</span>
+            </div>
+
+            <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight leading-tight">
+              {deviceInfo.isKioskEligible ? 'Layar Ujian Terkunci' : 'Terdeteksi Pelanggaran'}
+            </h3>
+
+            <p className="text-slate-600 text-xs md:text-sm font-semibold mb-6 leading-relaxed">
+              {deviceInfo.isKioskEligible 
+                ? 'Sistem mendeteksi Anda keluar dari mode Kiosk / Fullscreen, menekan tombol pintasan terlarang, berpindah aplikasi atau tab, atau membuka panel sistem.' 
+                : 'Sistem mendeteksi aktivitas luar aplikasi atau kehilangan fokus layar.'}
             </p>
-            <div className="bg-slate-50 p-4 rounded-2xl mb-8">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Sisa Kesempatan</p>
+
+            <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl mb-6">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Sisa Kesempatan Sebelum Diblokir</p>
               <p className="text-2xl font-black text-red-600">{MAX_VIOLATIONS - violations} / {MAX_VIOLATIONS}</p>
             </div>
-            <button onClick={() => { setIsFocusLost(false); startPersistence(); }} className="w-full py-5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">
-              Masuk Fullscreen & Lanjut
-            </button>
+
+            {deviceInfo.isKioskEligible ? (
+              <button 
+                onClick={reEnterKioskMode} 
+                className="w-full py-4 md:py-5 bg-gradient-to-r from-red-600 to-indigo-600 hover:from-red-700 hover:to-indigo-700 text-white rounded-2xl font-black text-xs md:text-sm uppercase tracking-widest shadow-xl shadow-red-500/20 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>🛡️ Kembali ke Kiosk Mode & Lanjut Ujian</span>
+              </button>
+            ) : (
+              <button 
+                onClick={() => { setIsFocusLost(false); setIsKioskLocked(false); }} 
+                className="w-full py-4 md:py-5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-xs md:text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all cursor-pointer"
+              >
+                Lanjutkan Ujian
+              </button>
+            )}
           </div>
         </div>
       )}

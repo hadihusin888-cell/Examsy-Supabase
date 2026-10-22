@@ -281,6 +281,34 @@ const StudentLogin: React.FC<StudentLoginProps> = ({ sessions, students, onLogin
             </div>
           </div>
 
+          {/* Indikator Status Kiosk Mode untuk Android & Windows vs iOS */}
+          {(() => {
+            if (typeof navigator === 'undefined') return null;
+            const ua = navigator.userAgent || '';
+            const platform = (navigator as any).userAgentData?.platform || navigator.platform || '';
+            const isIOS = /iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const isAndroid = /Android/i.test(ua);
+            const isWindows = /Windows|Win32|Win64|WOW64/i.test(ua) || /Win/i.test(platform);
+            
+            if ((isAndroid || isWindows) && !isIOS) {
+              return (
+                <div className="flex items-center justify-center gap-2 py-2 px-3 bg-emerald-50/80 rounded-xl border border-emerald-200/80 text-emerald-800 text-[10px] font-black uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                  <span>🛡️ Kiosk Mode Siap ({isAndroid ? 'Android' : 'Windows'})</span>
+                </div>
+              );
+            }
+            if (isIOS) {
+              return (
+                <div className="flex items-center justify-center gap-1.5 py-2 px-3 bg-amber-50/80 rounded-xl border border-amber-200/80 text-amber-800 text-[10px] font-bold uppercase tracking-wider">
+                  <span>🍏</span>
+                  <span>Mode iOS (Kiosk Mode Dilewati)</span>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           {error && (
             <div className="flex items-center gap-2 text-red-600 text-[10px] font-bold bg-red-50 p-3 rounded-xl border border-red-100 animate-in slide-in-from-top-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">

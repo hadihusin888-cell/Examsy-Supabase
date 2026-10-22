@@ -16,7 +16,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
-      allowedHosts: true
+      strictPort: true,
+      allowedHosts: true,
+      hmr: false
     },
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY)
