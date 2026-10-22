@@ -453,11 +453,6 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
         await (elem as any).webkitRequestFullscreen();
       }
 
-      // Kunci Pointer pada macOS desktop jika tersedia
-      if (deviceInfo.isMac && document.documentElement.requestPointerLock) {
-        document.documentElement.requestPointerLock();
-      }
-
       // Kunci Keyboard pada Windows / ChromeOS
       if ((deviceInfo.isWindows || deviceInfo.isChromeOS) && (navigator as any).keyboard?.lock) {
         (navigator as any).keyboard.lock([
@@ -763,12 +758,9 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
       }
     }, 1000);
 
-    // 7. Deteksi Swipe Area Atas (Android Status Bar Pull-down Guard)
-    const handleTouchStart = (e: TouchEvent) => {
-      if (deviceInfo.isAndroid && e.touches[0].clientY < 35) {
-        resetZoomTimer();
-        triggerViolation(ViolationReason.TOUCH_STATUS_BAR);
-      }
+    // 7. Touch listener (Reset timer & cegah zoom liar, tanpa false-alarm tarikan atas)
+    const handleTouchStart = () => {
+      resetZoomTimer();
     };
 
     window.addEventListener('visibilitychange', handleVisibility);
@@ -861,14 +853,7 @@ const ExamRoom: React.FC<ExamRoomProps> = ({ student, students, session, onActio
         await (elem as any).webkitRequestFullscreen();
       }
 
-      // 2. macOS Desktop: Kunci kursor di tengah layar (Pointer Lock)
-      if (deviceInfo.isMac && document.documentElement.requestPointerLock) {
-        try {
-          document.documentElement.requestPointerLock();
-        } catch (_) {}
-      }
-
-      // 3. Windows & ChromeOS: Keyboard Lock API
+      // 2. Windows & ChromeOS: Keyboard Lock API
       if ((deviceInfo.isWindows || deviceInfo.isChromeOS) && (navigator as any).keyboard?.lock) {
         await (navigator as any).keyboard.lock([
           'Escape', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',

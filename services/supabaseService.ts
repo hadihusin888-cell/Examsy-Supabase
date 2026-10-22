@@ -447,7 +447,23 @@ export const getDirectStudentAndSession = async (nis: string, sessionId: string)
   const cleanNis = String(nis).trim();
   const cleanSessionId = String(sessionId).trim();
 
-  // Try Supabase first if online
+  // 1. Cek Local Cache terlebih dahulu (0 DB query, instan tanpa menguras kuota)
+  const cachedStudentsRaw = localStorage.getItem("examsy_cache_students");
+  const cachedSessionsRaw = localStorage.getItem("examsy_cache_sessions");
+  const cachedStudents: Student[] = cachedStudentsRaw ? JSON.parse(cachedStudentsRaw) : DEFAULT_FALLBACK_STUDENTS;
+  const cachedSessions: ExamSession[] = cachedSessionsRaw ? JSON.parse(cachedSessionsRaw) : DEFAULT_FALLBACK_SESSIONS;
+
+  const localStudent = findStudentInList(cachedStudents, cleanNis) || null;
+  const localSession = cachedSessions.find(s => String(s.id).trim() === cleanSessionId) || null;
+
+  if (localStudent && localSession) {
+    return {
+      student: localStudent,
+      session: localSession
+    };
+  }
+
+  // 2. Jika belum ada di cache lokal, ambil langsung dari Supabase
   if (!checkIsOfflineFallbackActive()) {
     try {
       const [studentRes, sessionRes] = await Promise.all([
@@ -466,18 +482,9 @@ export const getDirectStudentAndSession = async (nis: string, sessionId: string)
     }
   }
 
-  // Fallback to local cache
-  const cachedStudentsRaw = localStorage.getItem("examsy_cache_students");
-  const cachedSessionsRaw = localStorage.getItem("examsy_cache_sessions");
-  const cachedStudents: Student[] = cachedStudentsRaw ? JSON.parse(cachedStudentsRaw) : DEFAULT_FALLBACK_STUDENTS;
-  const cachedSessions: ExamSession[] = cachedSessionsRaw ? JSON.parse(cachedSessionsRaw) : DEFAULT_FALLBACK_SESSIONS;
-
-  const matchedStudent = findStudentInList(cachedStudents, cleanNis) || null;
-  const matchedSession = cachedSessions.find(s => String(s.id).trim() === cleanSessionId) || null;
-
   return {
-    student: matchedStudent,
-    session: matchedSession
+    student: localStudent,
+    session: localSession
   };
 };
 
@@ -804,8 +811,33 @@ export const validateStudentLogin = async (
   let student: Student | null = null;
   let isFromRemoteDb = false;
 
-  // 1. Try querying Supabase first (if not in offline fallback mode)
-  if (!checkIsOfflineFallbackActive()) {
+  // 1. Cek Local Cache & Fallback Props terlebih dahulu (0 DB query - hemat kuota Free Tier)
+  const getCachedStudents = (): Student[] => {
+    try {
+      const raw = localStorage.getItem("examsy_cache_students");
+      return raw ? JSON.parse(raw) : DEFAULT_FALLBACK_STUDENTS;
+    } catch (_) {
+      return DEFAULT_FALLBACK_STUDENTS;
+    }
+  };
+
+  const cachedList = getCachedStudents().filter(s => !deletedNis.includes(String(s.nis)));
+  let localCandidate = findStudentInList(cachedList, trimmedNis) || null;
+
+  if (!localCandidate && Array.isArray(fallbackStudents) && fallbackStudents.length > 0) {
+    localCandidate = findStudentInList(fallbackStudents.filter(s => !deletedNis.includes(String(s.nis))), trimmedNis) || null;
+  }
+
+  // Jika siswa ada di cache lokal dan password sesuai, gunakan langsung tanpa panggil Supabase!
+  if (localCandidate) {
+    const localPass = String(localCandidate.password || (localCandidate as any).passkey || '').trim();
+    if (localPass === trimmedPass) {
+      student = localCandidate;
+    }
+  }
+
+  // 2. Jika tidak ditemukan secara lokal atau password lokal berbeda (mungkin baru diupdate oleh proktor di server), baru cek Supabase
+  if (!student && !checkIsOfflineFallbackActive()) {
     try {
       const { data, error: studentErr } = await supabase
         .from('students')
@@ -818,34 +850,16 @@ export const validateStudentLogin = async (
         isFromRemoteDb = true;
       }
     } catch (e) {
-      console.warn("Supabase direct query failed, will check cache/fallback:", e);
+      console.warn("Supabase direct query failed, will use local fallback:", e);
     }
   }
 
-  // 2. If not found in remote DB or remote query failed, search local storage cache and memory props
-  if (!student) {
-    const getCachedStudents = (): Student[] => {
-      try {
-        const raw = localStorage.getItem("examsy_cache_students");
-        return raw ? JSON.parse(raw) : DEFAULT_FALLBACK_STUDENTS;
-      } catch (_) {
-        return DEFAULT_FALLBACK_STUDENTS;
-      }
-    };
-
-    const cachedList = getCachedStudents().filter(s => !deletedNis.includes(String(s.nis)));
-    student = findStudentInList(cachedList, trimmedNis) || null;
-
-    if (!student && Array.isArray(fallbackStudents) && fallbackStudents.length > 0) {
-      student = findStudentInList(fallbackStudents.filter(s => !deletedNis.includes(String(s.nis))), trimmedNis) || null;
-    }
-
-    if (!student) {
-      student = findStudentInList(DEFAULT_FALLBACK_STUDENTS.filter(s => !deletedNis.includes(String(s.nis))), trimmedNis) || null;
-    }
+  // 3. Jika tetap belum ada di remote DB, ambil kandidat lokal yang ada (jika ada) untuk verifikasi pesan error
+  if (!student && localCandidate) {
+    student = localCandidate;
   }
 
-  // 3. If student is STILL not found in DB or local cache
+  // 4. Jika siswa TIDAK ditemukan di DB maupun local cache
   if (!student) {
     return { 
       success: false, 
@@ -853,10 +867,9 @@ export const validateStudentLogin = async (
     };
   }
 
-  // 4. Verify password
+  // 5. Verify password
   const studentPassword = String(student.password || (student as any).passkey || (student as any).Password || '').trim();
   if (studentPassword !== trimmedPass) {
-    // Check if case mismatch
     if (studentPassword.toLowerCase() === trimmedPass.toLowerCase()) {
       return { 
         success: false, 
@@ -869,7 +882,7 @@ export const validateStudentLogin = async (
     };
   }
 
-  // 5. Check student status
+  // 6. Check student status
   if (student.status === StudentStatus.BLOKIR) {
     return { 
       success: false, 
@@ -884,7 +897,7 @@ export const validateStudentLogin = async (
     };
   }
 
-  // 6. Check Class match (lenient)
+  // 7. Check Class match (lenient)
   if (trimmedClass && student.class && !isClassMatchingLenient(student.class, trimmedClass)) {
     return { 
       success: false, 
@@ -892,33 +905,23 @@ export const validateStudentLogin = async (
     };
   }
 
-  // 7. Find Matching Exam Session by PIN and Class (Strict Match)
+  // 8. Find Matching Exam Session by PIN and Class (Cache-First, 0 DB query)
   const deletedSessionIds = getDeletedIds("examsy_deleted_sessions");
   let allActiveSessionsWithPin: ExamSession[] = [];
 
-  // A. Gather active sessions with matching PIN from Supabase
-  if (!checkIsOfflineFallbackActive()) {
-    try {
-      const { data: rawSessions, error: sessionErr } = await supabase
-        .from('sessions')
-        .select('*');
-
-      if (!sessionErr && rawSessions && rawSessions.length > 0) {
-        const sessions = rawSessions
-          .map(normalizeSession)
-          .filter(sess => !deletedSessionIds.includes(String(sess.id)));
-
-        allActiveSessionsWithPin = sessions.filter(sess => 
-          sess.isActive && 
-          String(sess.pin || '').trim().toUpperCase() === trimmedPin
-        );
-      }
-    } catch (e) {
-      console.warn("Supabase sessions query failed, will check cache:", e);
+  // A. Ambil dari memory props (sudah dimuat saat App mount)
+  if (Array.isArray(fallbackSessions) && fallbackSessions.length > 0) {
+    const activeFromProps = fallbackSessions.filter(sess => 
+      !deletedSessionIds.includes(String(sess.id)) &&
+      sess.isActive && 
+      String(sess.pin || '').trim().toUpperCase() === trimmedPin
+    );
+    if (activeFromProps.length > 0) {
+      allActiveSessionsWithPin = activeFromProps;
     }
   }
 
-  // B. Gather active sessions with matching PIN from Local Cache
+  // B. Jika tidak ada di props, ambil dari Local Cache (0 DB query)
   if (allActiveSessionsWithPin.length === 0) {
     const getCachedSessions = (): ExamSession[] => {
       try {
@@ -936,14 +939,30 @@ export const validateStudentLogin = async (
     );
   }
 
-  // C. Gather active sessions with matching PIN from memory fallbacks
-  if (allActiveSessionsWithPin.length === 0) {
-    const allFallbacks = [
-      ...(Array.isArray(fallbackSessions) ? fallbackSessions : []),
-      ...DEFAULT_FALLBACK_SESSIONS
-    ].filter(sess => !deletedSessionIds.includes(String(sess.id)));
+  // C. Hanya jika sesi dengan PIN tersebut belum ada di cache sama sekali, baru query Supabase secara spesifik by PIN
+  if (allActiveSessionsWithPin.length === 0 && !checkIsOfflineFallbackActive()) {
+    try {
+      const { data: rawSessions, error: sessionErr } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('pin', trimmedPin);
 
-    allActiveSessionsWithPin = allFallbacks.filter(sess => 
+      if (!sessionErr && rawSessions && rawSessions.length > 0) {
+        const sessions = rawSessions
+          .map(normalizeSession)
+          .filter(sess => !deletedSessionIds.includes(String(sess.id)));
+
+        allActiveSessionsWithPin = sessions.filter(sess => sess.isActive);
+      }
+    } catch (e) {
+      console.warn("Supabase sessions query failed, will use fallback:", e);
+    }
+  }
+
+  // D. Fallback default jika masih kosong
+  if (allActiveSessionsWithPin.length === 0) {
+    allActiveSessionsWithPin = DEFAULT_FALLBACK_SESSIONS.filter(sess => 
+      !deletedSessionIds.includes(String(sess.id)) &&
       sess.isActive && 
       String(sess.pin || '').trim().toUpperCase() === trimmedPin
     );

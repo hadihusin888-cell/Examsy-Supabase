@@ -9,6 +9,13 @@
   -webkit-touch-callout: none !important; /* Disable iOS long-press callout menu (Copy, Look Up, Share) */
 }
 
+html, body {
+  overscroll-behavior: none !important;
+  overscroll-behavior-y: none !important;
+  overscroll-behavior-x: none !important;
+  -webkit-overscroll-behavior: none !important;
+}
+
 input, textarea, select {
   -webkit-touch-callout: default !important;
   -webkit-user-select: text !important;
