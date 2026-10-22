@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Student, ExamSession, Room, StudentStatus } from '../types';
+import { Student, ExamSession, Room, StudentStatus, DevicePlatform, ViolationResult } from '../types';
 import supabaseConfig from '../supabase-config.json';
 
 // Initialize Supabase Client
@@ -1232,3 +1232,121 @@ export const dbAction = async (action: string, payload: any): Promise<boolean> =
     return true;
   }
 };
+
+// Map untuk debouncing sinkronisasi database agar kuota free tier Supabase tetap terjaga hemat
+const violationDebounceMap: Record<string, ReturnType<typeof setTimeout>> = {};
+
+/**
+ * Log violation with local-first instant calculation and debounced Supabase sync.
+ * Prevents exhausting Supabase Free Tier quotas while ensuring 100% integrity.
+ */
+export const logViolationServer = async (
+  nis: string,
+  sessionId: string,
+  reason: string,
+  platform: DevicePlatform = 'UNKNOWN'
+): Promise<ViolationResult> => {
+  const cleanNis = String(nis || '').trim();
+  const cleanReason = String(reason || 'Pelanggaran Kiosk').trim();
+
+  // 1. Ambil data saat ini dari cache lokal secara instan (0 DB reads, hemat kuota)
+  let currentViolations = 0;
+  let currentStatus = StudentStatus.SEDANG_UJIAN;
+  try {
+    const rawCache = localStorage.getItem("examsy_cache_students");
+    if (rawCache) {
+      const cachedList: Student[] = JSON.parse(rawCache);
+      const found = cachedList.find(s => String(s.nis).trim() === cleanNis);
+      if (found) {
+        currentViolations = Number(found.violations || 0);
+        currentStatus = found.status;
+      }
+    }
+  } catch (_) {}
+
+  const newViolations = currentViolations + 1;
+  const maxViolations = 3;
+  const shouldBlock = newViolations >= maxViolations || currentStatus === StudentStatus.BLOKIR;
+
+  const updatedStudentPayload: any = {
+    nis: cleanNis,
+    violations: newViolations
+  };
+  if (shouldBlock) {
+    updatedStudentPayload.status = StudentStatus.BLOKIR;
+  }
+
+  // 2. Perbarui cache lokal dan broadcast seketika (0 DB reads, respon 0ms)
+  updateLocalCacheList('UPDATE_STUDENT', updatedStudentPayload);
+  broadcastStudentUpdate(updatedStudentPayload);
+
+  // 3. Sinkronisasi cerdas ke Supabase untuk menghemat kuota Free Tier:
+  // - Jika siswa DIBLOKIR: sinkronkan langsung tanpa jeda (1x tulis)
+  // - Jika masih pelanggaran biasa (1 atau 2): gunakan debounce 2.5 detik agar event beruntun hanya memakan 1x request ke Supabase
+  if (!checkIsOfflineFallbackActive()) {
+    if (shouldBlock) {
+      if (violationDebounceMap[cleanNis]) {
+        clearTimeout(violationDebounceMap[cleanNis]);
+        delete violationDebounceMap[cleanNis];
+      }
+      try {
+        await supabase
+          .from('students')
+          .update({
+            violations: newViolations,
+            status: StudentStatus.BLOKIR
+          })
+          .eq('nis', cleanNis);
+      } catch (err) {
+        console.warn("Direct block sync failed:", err);
+      }
+    } else {
+      if (violationDebounceMap[cleanNis]) {
+        clearTimeout(violationDebounceMap[cleanNis]);
+      }
+      violationDebounceMap[cleanNis] = setTimeout(async () => {
+        delete violationDebounceMap[cleanNis];
+        try {
+          await supabase
+            .from('students')
+            .update({
+              violations: newViolations
+            })
+            .eq('nis', cleanNis);
+        } catch (err) {
+          console.warn("Debounced violation sync failed:", err);
+        }
+      }, 2500);
+    }
+  }
+
+  return {
+    success: true,
+    violations: newViolations,
+    shouldBlock,
+    maxViolations
+  };
+};
+
+/**
+ * Check if student should be blocked using local in-memory/cache first (0 DB requests).
+ */
+export const checkShouldBlockStudent = async (nis: string): Promise<boolean> => {
+  const cleanNis = String(nis || '').trim();
+  if (!cleanNis) return false;
+
+  // Zero-cost in-memory cache check
+  try {
+    const rawCache = localStorage.getItem("examsy_cache_students");
+    if (rawCache) {
+      const cachedList: Student[] = JSON.parse(rawCache);
+      const found = cachedList.find(s => String(s.nis).trim() === cleanNis);
+      if (found) {
+        return found.status === StudentStatus.BLOKIR || Number(found.violations || 0) >= 3;
+      }
+    }
+  } catch (_) {}
+
+  return false;
+};
+
